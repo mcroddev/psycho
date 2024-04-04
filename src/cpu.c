@@ -78,6 +78,7 @@
 #define MULTU	(CPU_OP_MULTU)
 #define NCLIP	(CPU_OP_NCLIP)
 #define NOR	(CPU_OP_NOR)
+#define OP	(CPU_OP_OP)
 #define OR	(CPU_OP_OR)
 #define ORI	(CPU_OP_ORI)
 #define RFE	(CPU_OP_RFE)
@@ -153,6 +154,7 @@
 #define FLAG	(ctx->cpu.cp2.ccr.FLAG)
 #define D1	((s16)(R11R12 & 0xFFFF))
 #define D2	((s16)(R22R23 & 0xFFFF))
+#define D3	(ctx->cpu.cp2.ccr.R33)
 #define RT11	(D1)
 #define RT12	((s16)(R11R12 >> 16))
 #define RT13	((s16)(ctx->cpu.cp2.ccr.R13R21 & 0xFFFF))
@@ -1090,6 +1092,36 @@ void cpu_step(struct psycho_ctx *const ctx)
 				MAC0 = GTE_MAC0_ADD((s64)(SX0 * (SY1 - SY2)) +
 						    (SX1 * (SY2 - SY0)) +
 						    (SX2 * (SY0 - SY1)));
+
+				gte_flag_update(ctx);
+				break;
+			}
+
+			case OP: {
+				FLAG = 0;
+
+				const uint SHIFT_FRAC =
+					cpu_instr_shift_frac_get(
+						ctx->cpu.instr);
+
+				s64 sum = 0;
+				sum = GTE_MAC1_ADD((IR3 * D2) - (IR2 * D3));
+				MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = 0;
+				sum = GTE_MAC2_ADD((IR1 * D3) - (IR3 * D1));
+				MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = 0;
+				sum = GTE_MAC3_ADD((IR2 * D1) - (IR1 * D2));
+				MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+				const bool lm = ctx->cpu.instr &
+						CPU_INSTR_LM_FLAG;
+
+				IR1 = gte_chk_ir1(ctx, MAC1, lm);
+				IR2 = gte_chk_ir2(ctx, MAC2, lm);
+				IR3 = gte_chk_ir3(ctx, MAC3, lm);
 
 				gte_flag_update(ctx);
 				break;
