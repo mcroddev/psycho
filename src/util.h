@@ -22,6 +22,13 @@
 
 #pragma once
 
+#define min(a, b)                         \
+	({                                \
+		const typeof(a) _a = (a); \
+		const typeof(b) _b = (b); \
+		_a < _b ? _a : _b;        \
+	})
+
 #define clamp(x, lo, hi)                                  \
 	({                                                \
 		const typeof(x) _x = (x);                 \

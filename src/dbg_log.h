@@ -37,7 +37,7 @@ void dbg_log_msg(const struct psycho_dbg_log *log, uint level, const char *msg,
 // clang-format off
 
 #define LOG_INFO(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_INFO, args))
-#define LOG_WARN(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_WARN, args))
+#define LOG_WARN(args...)	//(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_WARN, args))
 #define LOG_ERR(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_ERR, args))
 #define LOG_FATAL(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_FATAL, args))
 #define LOG_DBG(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_DBG, args))

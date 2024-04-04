@@ -393,6 +393,26 @@
 	 CPU_CP2_CCR_FLAG_RGB_R_SATURATED | CPU_CP2_CCR_FLAG_RGB_G_SATURATED | \
 	 CPU_CP2_CCR_FLAG_RGB_B_SATURATED | CPU_CP2_CCR_FLAG_IR0_SATURATED)
 
+#define CPU_CP2_CPR_MAC0_MIN	(-(INT64_C(1) << 31))
+#define CPU_CP2_CPR_MAC0_MAX	((1U << 31) - 1)
+#define CPU_CP2_CPR_MAC123_MIN	(-(INT64_C(1) << 43))
+#define CPU_CP2_CPR_MAC123_MAX	((INT64_C(1) << 43) - 1)
+
+#define CPU_CP2_CPR_IR0_MIN		(0)
+#define CPU_CP2_CPR_IR0_MAX		(1 << 12)
+#define CPU_CP2_CPR_IR123_LM_MIN	(0)
+#define CPU_CP2_CPR_IR123_MIN		(-(1 << 15))
+#define CPU_CP2_CPR_IR123_MAX		((1 << 15) - 1)
+
+#define CPU_CP2_CPR_SXY2_MIN	(-(1 << 10))
+#define CPU_CP2_CPR_SXY2_MAX	((1 << 10) - 1)
+
+#define CPU_CP2_CPR_SZ3_OTZ_MIN	(0)
+#define CPU_CP2_CPR_SZ3_OTZ_MAX	((1 << 16) - 1)
+
+#define CPU_INSTR_LM_FLAG (1 << 10)
+#define CPU_INSTR_SF_FLAG (1 << 19)
+
 // clang-format on
 
 /// @brief Retrieves the 6-bit operation code from an instruction.
@@ -513,6 +533,11 @@ ALWAYS_INLINE NODISCARD u32 cpu_branch_tgt_get(const u32 instr, const u32 pc)
 ALWAYS_INLINE NODISCARD u32 cpu_vaddr_to_paddr(const u32 vaddr)
 {
 	return vaddr & 0x1FFFFFFF;
+}
+
+ALWAYS_INLINE uint cpu_instr_shift_frac_get(const u32 instr)
+{
+	return instr & CPU_INSTR_SF_FLAG ? 12 : 0;
 }
 
 extern const char *const exc_code_names[];
