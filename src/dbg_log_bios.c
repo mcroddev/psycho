@@ -134,6 +134,12 @@ static const struct bios_fn a0_table[] = {
 		PROTOTYPE("void AddDummyTtyDevice(void)"),
 		.retval_type	= RETVAL_TYPE_NONE,
 		.format_args	= false
+	},
+
+	[0xA3] = {
+		PROTOTYPE("void DequeueCdIntr(void)"),
+		.retval_type	= RETVAL_TYPE_NONE,
+		.format_args	= false
 	}
 };
 
@@ -191,6 +197,12 @@ static const struct bios_fn c0_table[] = {
 	[0x01] = {
 		PROTOTYPE("void EnqueueSyscallHandler(int prio=%d)"),
 		.retval_type	= RETVAL_TYPE_NONE,
+		.format_args	= true
+	},
+
+	[0x03] = {
+		PROTOTYPE("void *SysDeqIntRP(int prio=%d, int struc=%d"),
+		.retval_type	= RETVAL_TYPE_PTR,
 		.format_args	= true
 	},
 

@@ -29,6 +29,7 @@
 #include "cpu_defs.h"
 #include "bus.h"
 #include "dbg_log.h"
+#include "util.h"
 
 // clang-format off
 
@@ -37,6 +38,7 @@
 
 #define GROUP_BCOND	(CPU_OP_GROUP_BCOND)
 #define GROUP_COP0	(CPU_OP_GROUP_COP0)
+#define GROUP_COP2	(CPU_OP_GROUP_COP2)
 #define GROUP_SPECIAL	(CPU_OP_GROUP_SPECIAL)
 
 #define ADD	(CPU_OP_ADD)
@@ -50,6 +52,8 @@
 #define BLEZ	(CPU_OP_BLEZ)
 #define BNE	(CPU_OP_BNE)
 #define BREAK	(CPU_OP_BREAK)
+#define CF	(CPU_OP_CF)
+#define CT	(CPU_OP_CT)
 #define DIV	(CPU_OP_DIV)
 #define DIVU	(CPU_OP_DIVU)
 #define J	(CPU_OP_J)
@@ -107,6 +111,23 @@
 #define EPC	(CP0_CPR[CPU_CP0_CPR_EPC])
 #define SR	(CP0_CPR[CPU_CP0_CPR_SR])
 
+#define CP2_CPR	(ctx->cpu.cp2.cpr.regs)
+#define IR1	(ctx->cpu.cp2.cpr.IR1)
+#define IR2	(ctx->cpu.cp2.cpr.IR2)
+#define IR3	(ctx->cpu.cp2.cpr.IR3)
+#define OTZ	(ctx->cpu.cp2.cpr.OTZ)
+#define VXY0	(ctx->cpu.cp2.cpr.VXY0)
+#define VZ0	(ctx->cpu.cp2.cpr.VZ0)
+#define SXY0	(ctx->cpu.cp2.cpr.SXY0)
+#define SXY1	(ctx->cpu.cp2.cpr.SXY1)
+#define SXY2	(ctx->cpu.cp2.cpr.SXY2)
+#define LZCS	(ctx->cpu.cp2.cpr.LZCS)
+#define LZCR	(ctx->cpu.cp2.cpr.LZCR)
+
+#define CP2_CCR	(ctx->cpu.cp2.ccr.regs)
+#define R11R12	(ctx->cpu.cp2.ccr.R11R12)
+#define FLAG	(ctx->cpu.cp2.ccr.FLAG)
+
 #define AdEL	(PSYCHO_CPU_EXC_CODE_AdEL)
 #define AdES	(PSYCHO_CPU_EXC_CODE_AdES)
 #define Bp	(PSYCHO_CPU_EXC_CODE_Bp)
@@ -135,6 +156,13 @@ const char *const exc_code_names[] = { [AdEL] = "Address error on load",
 				       [Bp] = "Breakpoint",
 				       [RI] = "Reserved instruction",
 				       [Ovf] = "Arithmetic overflow" };
+
+static ALWAYS_INLINE void gte_flag_update(struct psycho_ctx *const ctx)
+{
+	if (FLAG & CPU_CP2_CCR_FLAG_MASK_ERR) {
+		FLAG |= CPU_CP2_CCR_FLAG_ERR;
+	}
+}
 
 /// @brief Branches to the target address if a condition was met.
 /// @param ctx The psycho_ctx instance.
@@ -624,6 +652,133 @@ void cpu_step(struct psycho_ctx *const ctx)
 				EXC_RAISE(RI);
 				break;
 			}
+			break;
+		}
+		break;
+
+	case GROUP_COP2:
+		switch (rs) {
+		case MF:
+			switch (rd) {
+			case CPU_CP2_CPR_IR0:
+			case CPU_CP2_CPR_IR1:
+			case CPU_CP2_CPR_IR2:
+			case CPU_CP2_CPR_IR3:
+				GPR[rt] = (u32)(s16)CP2_CPR[rd];
+				break;
+
+			case CPU_CP2_CPR_SXYP:
+				GPR[rt] = (u32)SXY2;
+				break;
+
+			case CPU_CP2_CPR_IRGB:
+			case CPU_CP2_CPR_ORGB: {
+				s32 b = IR3 >> 7;
+				s32 g = IR2 >> 7;
+				s32 r = IR1 >> 7;
+
+				b = clamp(b, 0x00, 0x1F) << 10;
+				g = clamp(g, 0x00, 0x1F) << 5;
+				r = clamp(r, 0x00, 0x1F);
+
+				GPR[rt] = (u32)(b | g | r);
+				break;
+			}
+
+			case CPU_CP2_CPR_LZCR: {
+				if (LZCS > 0) {
+					GPR[rt] =
+						(u32)__builtin_clz((uint)LZCS);
+				} else if (LZCS < 0) {
+					const uint n = (uint)~LZCS;
+					GPR[rt] = n ? (u32)__builtin_clz(n) :
+						      32;
+				} else {
+					GPR[rt] = 32;
+				}
+				break;
+			}
+
+			default:
+				GPR[rt] = CP2_CPR[rd];
+				break;
+			}
+			break;
+
+		case CF:
+			switch (rd) {
+			case CPU_CP2_CCR_H:
+				GPR[rt] = (u32)(s16)CP2_CCR[rd];
+				break;
+
+			default:
+				GPR[rt] = CP2_CCR[rd];
+				break;
+			}
+			break;
+
+		case MT:
+			switch (rd) {
+			case CPU_CP2_CPR_VZ0:
+			case CPU_CP2_CPR_VZ1:
+			case CPU_CP2_CPR_VZ2:
+			case CPU_CP2_CPR_IR0:
+				CP2_CPR[rd] = (u32)(s16)GPR[rt];
+				break;
+
+			case CPU_CP2_CPR_OTZ:
+			case CPU_CP2_CPR_SZ0:
+			case CPU_CP2_CPR_SZ1:
+			case CPU_CP2_CPR_SZ2:
+			case CPU_CP2_CPR_SZ3:
+				CP2_CPR[rd] = (u16)GPR[rt];
+				break;
+
+			case CPU_CP2_CPR_SXYP:
+				SXY0 = SXY1;
+				SXY1 = SXY2;
+				SXY2 = (s32)GPR[rt];
+
+				break;
+
+			case CPU_CP2_CPR_IRGB:
+				IR1 = (s16)((GPR[rt] & 0x1F) << 7);
+				IR2 = (s16)(((GPR[rt] >> 5) & 0x1F) << 7);
+				IR3 = (s16)(((GPR[rt] >> 10) & 0x1F) << 7);
+
+				break;
+
+			default:
+				CP2_CPR[rd] = GPR[rt];
+				break;
+			}
+			break;
+
+		case CT:
+			switch (rd) {
+			case CPU_CP2_CCR_R33:
+			case CPU_CP2_CCR_L33:
+			case CPU_CP2_CCR_LB3:
+			case CPU_CP2_CCR_DQA:
+			case CPU_CP2_CCR_ZSF3:
+			case CPU_CP2_CCR_ZSF4:
+				CP2_CCR[rd] = (u32)(s16)GPR[rt];
+				break;
+
+			case CPU_CP2_CCR_FLAG:
+				FLAG = GPR[rt] & CPU_CP2_CCR_FLAG_MASK_WRITE;
+				gte_flag_update(ctx);
+
+				break;
+
+			default:
+				CP2_CCR[rd] = GPR[rt];
+				break;
+			}
+			break;
+
+		default:
+			EXC_RAISE(RI);
 			break;
 		}
 		break;
