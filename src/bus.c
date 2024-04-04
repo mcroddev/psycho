@@ -63,8 +63,7 @@ u32 bus_lw(const struct psycho_ctx *const ctx, const u32 paddr)
 		return word;
 	}
 
-	LOG_TRACE("Loaded word 0x%08X from physical address 0x%08X", word,
-		  paddr);
+	LOG_TRACE("Loaded word 0x%08X from 0x%08X", word, paddr);
 	return word;
 }
 
@@ -87,8 +86,7 @@ u16 bus_lh(const struct psycho_ctx *ctx, const u32 paddr)
 			 paddr);
 		return hword;
 	}
-	LOG_TRACE("Loaded half-word 0x%08X from physical address 0x%08X", hword,
-		  paddr);
+	LOG_TRACE("Loaded half-word 0x%04X from 0x%08X", hword, paddr);
 	return hword;
 }
 

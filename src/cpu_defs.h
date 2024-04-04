@@ -355,8 +355,8 @@
 #define CPU_VEC_RST		(0xBFC00000)
 #define CPU_VEC_EXC		(0x80000080)
 
-#define CPU_CP0_CPR_REG_SR	(12)
-#define CPU_CP0_CPR_REG_SR_IsC	(1 << 16)
+#define CPU_CP0_CPR_SR		(12)
+#define CPU_CP0_CPR_SR_IsC	(1 << 16)
 
 // clang-format on
 

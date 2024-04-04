@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+/// @file cpu.c Defines the implementation of the CPU interpreter.
+
 #include <stdbool.h>
 #include <string.h>
 
@@ -30,11 +32,12 @@
 
 // clang-format off
 
+#define zero	(CPU_GPR_zero)
 #define ra	(CPU_GPR_ra)
 
-#define GROUP_SPECIAL	(CPU_OP_GROUP_SPECIAL)
 #define GROUP_BCOND	(CPU_OP_GROUP_BCOND)
 #define GROUP_COP0	(CPU_OP_GROUP_COP0)
+#define GROUP_SPECIAL	(CPU_OP_GROUP_SPECIAL)
 
 #define ADD	(CPU_OP_ADD)
 #define ADDI	(CPU_OP_ADDI)
@@ -53,8 +56,6 @@
 #define JAL	(CPU_OP_JAL)
 #define JALR	(CPU_OP_JALR)
 #define JR	(CPU_OP_JR)
-#define OR	(CPU_OP_OR)
-#define ORI	(CPU_OP_ORI)
 #define LB	(CPU_OP_LB)
 #define LBU	(CPU_OP_LBU)
 #define LH	(CPU_OP_LH)
@@ -66,12 +67,14 @@
 #define MF	(CPU_OP_MF)
 #define MFHI	(CPU_OP_MFHI)
 #define MFLO	(CPU_OP_MFLO)
+#define MT	(CPU_OP_MT)
 #define MTHI	(CPU_OP_MTHI)
 #define MTLO	(CPU_OP_MTLO)
 #define MULT	(CPU_OP_MULT)
 #define MULTU	(CPU_OP_MULTU)
-#define MT	(CPU_OP_MT)
 #define NOR	(CPU_OP_NOR)
+#define OR	(CPU_OP_OR)
+#define ORI	(CPU_OP_ORI)
 #define RFE	(CPU_OP_RFE)
 #define SB	(CPU_OP_SB)
 #define SH	(CPU_OP_SH)
@@ -94,36 +97,35 @@
 #define XOR	(CPU_OP_XOR)
 #define XORI	(CPU_OP_XORI)
 
+#define GPR	(ctx->cpu.gpr)
 #define NPC	(ctx->cpu.npc)
 #define PC 	(ctx->cpu.pc)
-#define GPR	(ctx->cpu.gpr)
 
 #define CP0_CPR	(ctx->cpu.cp0_cpr)
 #define BadA	(CP0_CPR[CPU_CP0_CPR_BadA])
 #define Cause	(CP0_CPR[CPU_CP0_CPR_Cause])
-#define SR	(CP0_CPR[CPU_CP0_CPR_REG_SR])
 #define EPC	(CP0_CPR[CPU_CP0_CPR_EPC])
+#define SR	(CP0_CPR[CPU_CP0_CPR_SR])
 
 #define AdEL	(PSYCHO_CPU_EXC_CODE_AdEL)
 #define AdES	(PSYCHO_CPU_EXC_CODE_AdES)
-#define Sys	(PSYCHO_CPU_EXC_CODE_Sys)
 #define Bp	(PSYCHO_CPU_EXC_CODE_Bp)
-#define RI	(PSYCHO_CPU_EXC_CODE_RI)
 #define Ovf	(PSYCHO_CPU_EXC_CODE_Ovf)
+#define Sys	(PSYCHO_CPU_EXC_CODE_Sys)
+#define RI	(PSYCHO_CPU_EXC_CODE_RI)
 
 #define EXC_RAISE(exc_code)	(exc_raise(ctx, (exc_code)))
 #define BRANCH_IF(cond)		(branch_if(ctx, (cond)))
 
+#define JMP_TGT (cpu_jmp_tgt_get(ctx->cpu.instr, PC))
+
 #define LDS_NEXT	(ctx->cpu.lds_next)
 #define LDS_PEND	(ctx->cpu.lds_pend)
-
 
 #define HI	(ctx->cpu.hi)
 #define LO	(ctx->cpu.lo)
 
-#define base (cpu_instr_base_get(ctx->cpu.instr))
-
-#define IsC	(CPU_CP0_CPR_REG_SR_IsC)
+#define IsC	(CPU_CP0_CPR_SR_IsC)
 
 // clang-format on
 
@@ -134,6 +136,10 @@ const char *const exc_code_names[] = { [AdEL] = "Address error on load",
 				       [RI] = "Reserved instruction",
 				       [Ovf] = "Arithmetic overflow" };
 
+/// @brief Branches to the target address if a condition was met.
+/// @param ctx The psycho_ctx instance.
+/// @param condition_met `true` if the branch condition was met, or `false`
+/// otherwise.
 static ALWAYS_INLINE void branch_if(struct psycho_ctx *const ctx,
 				    const bool condition_met)
 {
@@ -142,6 +148,17 @@ static ALWAYS_INLINE void branch_if(struct psycho_ctx *const ctx,
 	}
 }
 
+/// @brief Checks for overflow in a two's complement sum.
+///
+/// A sum has overflowed if:
+///
+/// * two positive numbers yields a negative result, or;
+/// * two negative numbers yields a positive result.
+///
+/// @param first The first addend.
+/// @param second The second addend.
+/// @param sum The sum of both addends.
+/// @returns `true` if the sum has overflowed, or `false` otherwise.
 static ALWAYS_INLINE NODISCARD bool ovf_add(const u32 first, const u32 second,
 					    const u32 sum)
 {
@@ -149,6 +166,20 @@ static ALWAYS_INLINE NODISCARD bool ovf_add(const u32 first, const u32 second,
 	       ((sum ^ first) & CPU_SIGN_BIT);
 }
 
+/// @brief Checks for overflow in a two's complement subtraction.
+///
+/// A difference has overflowed if:
+///
+/// * a positive number subtracted from a negative number yields a positive
+///   result, or;
+///
+/// * a negative number subtracted from a positive number yields a negative
+///   result.
+///
+/// @param first The minuend.
+/// @param second The subtrahend.
+/// @param diff The difference between the minuend and the subtrahend.
+/// @returns `true` if the difference has overflowed, or `false` otherwise.
 static ALWAYS_INLINE NODISCARD bool ovf_sub(const u32 first, const u32 second,
 					    const u32 diff)
 {
@@ -156,17 +187,28 @@ static ALWAYS_INLINE NODISCARD bool ovf_sub(const u32 first, const u32 second,
 	       ((diff ^ first) & CPU_SIGN_BIT);
 }
 
+/// @brief Handles the load delay slot.
+///
+/// When a load instruction is executed (with the exception of LWL/LWR), the
+/// data read is not immediately available to the next instruction; a delay of
+/// one instruction is necessary.
+///
+/// @param ctx The psycho_ctx instance.
+/// @param dst The general purpose register to store the value.
+/// @param val The value to store.
 static ALWAYS_INLINE void load_delay(struct psycho_ctx *const ctx,
 				     const uint dst, const u32 val)
 {
 	if (unlikely(dst == CPU_GPR_zero)) {
+		// $zero must always indeed remain $zero; psxtest_cpu exercises
+		// this case.
 		return;
 	}
 
 	LDS_PEND.dst = dst;
 	LDS_PEND.val = val;
 
-	LOG_TRACE("Load delay now pending");
+	LOG_TRACE("Load delay now pending (dst=%d, val=0x%08X)", dst, val);
 
 	if (LDS_NEXT.dst == dst) {
 		LOG_TRACE("Evicting next load delay slot");
@@ -174,6 +216,9 @@ static ALWAYS_INLINE void load_delay(struct psycho_ctx *const ctx,
 	}
 }
 
+/// @brief Raises an exception.
+/// @param ctx The psycho_ctx instance.
+/// @param exc_code The exception to raise.
 static void exc_raise(struct psycho_ctx *const ctx, const uint exc_code)
 {
 	// Note that in an emulation context, we may not want to actually
@@ -224,12 +269,32 @@ static void exc_raise(struct psycho_ctx *const ctx, const uint exc_code)
 	NPC = CPU_VEC_EXC + sizeof(u32);
 }
 
-static ALWAYS_INLINE NODISCARD u32 vaddr_get(struct psycho_ctx *const ctx)
+/// @brief Retrieves the virtual address for a load/store operation.
+/// @param ctx The psycho_ctx instance.
+/// @returns The virtual address.
+static ALWAYS_INLINE NODISCARD u32 vaddr_get(const struct psycho_ctx *const ctx)
 {
+	const u32 base = cpu_instr_base_get(ctx->cpu.instr);
 	const u32 offset = cpu_instr_offset_get(ctx->cpu.instr);
+
 	return GPR[base] + offset;
 }
 
+/// @brief Retrieves the physical address for a load/store operation.
+/// @param ctx The psycho_ctx instance.
+/// @returns The physical address.
+static ALWAYS_INLINE NODISCARD u32 paddr_get(const struct psycho_ctx *const ctx)
+{
+	const u32 vaddr = vaddr_get(ctx);
+	return cpu_vaddr_to_paddr(vaddr);
+}
+
+/// @brief Fetches the instruction pointed to by the program counter.
+///
+/// This corresponds to the IF (Instruction Fetch) stage of the MIPS-I pipeline.
+///
+/// @param ctx The psycho_ctx instance.
+/// @returns The instruction that was fetched.
 static ALWAYS_INLINE NODISCARD u32 instr_fetch(struct psycho_ctx *const ctx)
 {
 	const u32 paddr = cpu_vaddr_to_paddr(PC);
@@ -247,6 +312,12 @@ static ALWAYS_INLINE NODISCARD u32 instr_fetch(struct psycho_ctx *const ctx)
 	return instr;
 }
 
+/// @brief Resets the CPU to the startup state.
+///
+/// In MIPS-I terms, this is effectively a "reset exception". It does not pass
+/// through normal exception handling, of course.
+///
+/// @param ctx The psycho_ctx instance
 void cpu_reset(struct psycho_ctx *const ctx)
 {
 	memset(GPR, 0, sizeof(GPR));
@@ -261,6 +332,8 @@ void cpu_reset(struct psycho_ctx *const ctx)
 	LOG_INFO("CPU reset!");
 }
 
+/// @brief Executes the current instruction.
+/// @param ctx The psycho_ctx instance.
 void cpu_step(struct psycho_ctx *const ctx)
 {
 #define op (cpu_instr_op_get(ctx->cpu.instr))
@@ -311,16 +384,16 @@ void cpu_step(struct psycho_ctx *const ctx)
 			break;
 
 		case JALR: {
-			const u32 jump_target = GPR[rs];
+			const u32 jmp_tgt = GPR[rs];
 
 			GPR[rd] = PC + 8;
 
-			if (unlikely((jump_target & 3) != 0)) {
+			if (unlikely((jmp_tgt & 3) != 0)) {
 				EXC_RAISE(AdEL);
 				break;
 			}
 
-			NPC = jump_target;
+			NPC = jmp_tgt;
 			break;
 		}
 
@@ -467,12 +540,12 @@ void cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case J:
-		NPC = cpu_jmp_tgt_get(ctx->cpu.instr, PC);
+		NPC = JMP_TGT;
 		break;
 
 	case JAL:
 		GPR[ra] = PC + 8;
-		NPC = cpu_jmp_tgt_get(ctx->cpu.instr, PC);
+		NPC = JMP_TGT;
 
 		break;
 
@@ -556,35 +629,32 @@ void cpu_step(struct psycho_ctx *const ctx)
 		break;
 
 	case LB: {
-		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
+		const u32 paddr = paddr_get(ctx);
+		const s8 byte = (s8)bus_lb(ctx, paddr);
 
-		const u32 byte = (u32)(s8)bus_lb(ctx, paddr);
-
-		load_delay(ctx, rt, byte);
+		load_delay(ctx, rt, (u32)byte);
 		break;
 	}
 
 	case LH: {
 		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
 
 		if (unlikely((vaddr & 1) != 0)) {
 			EXC_RAISE(AdEL);
 			break;
 		}
 
-		const u32 hword = (u32)(s16)bus_lh(ctx, paddr);
+		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
+		const s16 hword = (s16)bus_lh(ctx, paddr);
 
-		load_delay(ctx, rt, hword);
+		load_delay(ctx, rt, (u32)hword);
 		break;
 	}
 
 	case LWL: {
-		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-
+		const u32 paddr = paddr_get(ctx);
 		const u32 data = bus_lw(ctx, paddr & (u32)~3);
+
 		u32 word = (LDS_NEXT.dst == rt) ? LDS_NEXT.val : GPR[rt];
 
 		const uint shift = (paddr & 3) * 8;
@@ -603,8 +673,8 @@ void cpu_step(struct psycho_ctx *const ctx)
 			EXC_RAISE(AdEL);
 			break;
 		}
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
 
+		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
 		const u32 word = bus_lw(ctx, paddr);
 
 		load_delay(ctx, rt, word);
@@ -612,9 +682,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case LBU: {
-		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-
+		const u32 paddr = paddr_get(ctx);
 		const u8 byte = bus_lb(ctx, paddr);
 
 		load_delay(ctx, rt, byte);
@@ -623,13 +691,13 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 	case LHU: {
 		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
 
 		if (unlikely((vaddr & 1) != 0)) {
 			EXC_RAISE(AdEL);
 			break;
 		}
 
+		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
 		const u16 hword = bus_lh(ctx, paddr);
 
 		load_delay(ctx, rt, hword);
@@ -637,9 +705,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case LWR: {
-		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-
+		const u32 paddr = paddr_get(ctx);
 		const u32 data = bus_lw(ctx, paddr & (u32)~3);
 
 		u32 word = LDS_NEXT.dst == rt ? LDS_NEXT.val : GPR[rt];
@@ -654,8 +720,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case SB: {
-		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
+		const u32 paddr = paddr_get(ctx);
 
 		bus_sb(ctx, paddr, (u8)GPR[rt]);
 		break;
@@ -676,9 +741,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case SWL: {
-		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-
+		const u32 paddr = paddr_get(ctx);
 		const u32 aligned_paddr = paddr & (u32)~3;
 
 		u32 word = bus_lw(ctx, aligned_paddr);
@@ -711,9 +774,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case SWR: {
-		const u32 vaddr = vaddr_get(ctx);
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-
+		const u32 paddr = paddr_get(ctx);
 		const u32 aligned_paddr = paddr & (u32)~3;
 
 		u32 word = bus_lw(ctx, aligned_paddr);
@@ -731,7 +792,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 		EXC_RAISE(RI);
 		break;
 	}
-	GPR[0] = 0;
+	GPR[zero] = 0;
 	PC += sizeof(u32);
 	ctx->cpu.instr = instr_fetch(ctx);
 }
