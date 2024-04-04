@@ -79,6 +79,7 @@
 #define MULT	(CPU_OP_MULT)
 #define MULTU	(CPU_OP_MULTU)
 #define MVMVA	(CPU_OP_MVMVA)
+#define NCDS	(CPU_OP_NCDS)
 #define NCLIP	(CPU_OP_NCLIP)
 #define NOR	(CPU_OP_NOR)
 #define OP	(CPU_OP_OP)
@@ -592,6 +593,77 @@ static void gte_dpc(struct psycho_ctx *const ctx, const u32 rgb)
 	MAC1 = (s32)((rgb & 0xFF) << 16);
 	MAC2 = (s32)(((rgb >> 8) & 0xFF) << 16);
 	MAC3 = (s32)(((rgb >> 16) & 0xFF) << 16);
+
+	gte_intpl_color(ctx);
+	gte_rgb_push(ctx);
+	gte_flag_update(ctx);
+}
+
+static void gte_ncd(struct psycho_ctx *const ctx, const s16 x, const s16 y,
+		    const s16 z)
+{
+	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(ctx->cpu.instr);
+
+	s64 sum = 0;
+	sum = GTE_MAC1_ADD(L11 * x);
+	sum = GTE_MAC1_ADD(L12 * y);
+	sum = GTE_MAC1_ADD(L13 * z);
+	MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = GTE_MAC2_ADD(L21 * x);
+	sum = GTE_MAC2_ADD(L22 * y);
+	sum = GTE_MAC2_ADD(L23 * z);
+	MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = GTE_MAC3_ADD(L31 * x);
+	sum = GTE_MAC3_ADD(L32 * y);
+	sum = GTE_MAC3_ADD(L33 * z);
+	MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+	const bool lm = ctx->cpu.instr & CPU_INSTR_LM_FLAG;
+
+	IR1 = gte_chk_ir1(ctx, MAC1, lm);
+	IR2 = gte_chk_ir2(ctx, MAC2, lm);
+	IR3 = gte_chk_ir3(ctx, MAC3, lm);
+
+	sum = 0;
+	sum = GTE_MAC1_ADD((u64)(s64)RBK << 12);
+	sum = GTE_MAC1_ADD(LR1 * IR1);
+	sum = GTE_MAC1_ADD(LR2 * IR2);
+	sum = GTE_MAC1_ADD(LR3 * IR3);
+	MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = GTE_MAC2_ADD((u64)(s64)GBK << 12);
+	sum = GTE_MAC2_ADD(LG1 * IR1);
+	sum = GTE_MAC2_ADD(LG2 * IR2);
+	sum = GTE_MAC2_ADD(LG3 * IR3);
+	MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = GTE_MAC3_ADD((u64)(s64)BBK << 12);
+	sum = GTE_MAC3_ADD(LB1 * IR1);
+	sum = GTE_MAC3_ADD(LB2 * IR2);
+	sum = GTE_MAC3_ADD(LB3 * IR3);
+	MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+	IR1 = gte_chk_ir1(ctx, MAC1, lm);
+	IR2 = gte_chk_ir2(ctx, MAC2, lm);
+	IR3 = gte_chk_ir3(ctx, MAC3, lm);
+
+	sum = 0;
+	sum = GTE_MAC1_ADD(((RGBC & 0xFF) * IR1) << 4);
+	MAC1 = (s32)sum;
+
+	sum = 0;
+	sum = GTE_MAC2_ADD((((RGBC >> 8) & 0xFF) * IR2) << 4);
+	MAC2 = (s32)sum;
+
+	sum = 0;
+	sum = GTE_MAC3_ADD((((RGBC >> 16) & 0xFF) * IR3) << 4);
+	MAC3 = (s32)sum;
 
 	gte_intpl_color(ctx);
 	gte_rgb_push(ctx);
@@ -1429,7 +1501,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 				if (tx == 2) {
 					sum = 0;
-					sum = GTE_MAC1_ADD((s64)(u64)Tx1 << 12);
+					sum = GTE_MAC1_ADD((s64)((u64)Tx1 << 12));
 					sum = GTE_MAC1_ADD(Mx11 * Vx1);
 					MAC1 = (s32)(sum >> SHIFT_FRAC);
 					IR1 = gte_chk_ir1(ctx, MAC1, false);
@@ -1441,7 +1513,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 					IR1 = gte_chk_ir1(ctx, MAC1, lm);
 
 					sum = 0;
-					sum = GTE_MAC2_ADD((s64)(u64)Tx2 << 12);
+					sum = GTE_MAC2_ADD((s64)((u64)Tx2 << 12));
 					sum = GTE_MAC2_ADD(Mx21 * Vx1);
 					MAC2 = (s32)(sum >> SHIFT_FRAC);
 					IR2 = gte_chk_ir2(ctx, MAC2, false);
@@ -1453,7 +1525,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 					IR2 = gte_chk_ir2(ctx, MAC2, lm);
 
 					sum = 0;
-					sum = GTE_MAC3_ADD((s64)(u64)Tx3 << 12);
+					sum = GTE_MAC3_ADD((s64)((u64)Tx3 << 12));
 					sum = GTE_MAC3_ADD(Mx31 * Vx1);
 					MAC3 = (s32)(sum >> SHIFT_FRAC);
 					IR3 = gte_chk_ir3(ctx, MAC3, false);
@@ -1465,21 +1537,21 @@ void cpu_step(struct psycho_ctx *const ctx)
 					IR3 = gte_chk_ir3(ctx, MAC3, lm);
 				} else {
 					sum = 0;
-					sum = GTE_MAC1_ADD((s64)(u64)Tx1 << 12);
+					sum = GTE_MAC1_ADD((s64)((u64)Tx1 << 12));
 					sum = GTE_MAC1_ADD(Mx11 * Vx1);
 					sum = GTE_MAC1_ADD(Mx12 * Vx2);
 					sum = GTE_MAC1_ADD(Mx13 * Vx3);
 					MAC1 = (s32)(sum >> SHIFT_FRAC);
 
 					sum = 0;
-					sum = GTE_MAC2_ADD((s64)(u64)Tx2 << 12);
+					sum = GTE_MAC2_ADD((s64)((u64)Tx2 << 12));
 					sum = GTE_MAC2_ADD(Mx21 * Vx1);
 					sum = GTE_MAC2_ADD(Mx22 * Vx2);
 					sum = GTE_MAC2_ADD(Mx23 * Vx3);
 					MAC2 = (s32)(sum >> SHIFT_FRAC);
 
 					sum = 0;
-					sum = GTE_MAC3_ADD((s64)(u64)Tx3 << 12);
+					sum = GTE_MAC3_ADD((s64)((u64)Tx3 << 12));
 					sum = GTE_MAC3_ADD(Mx31 * Vx1);
 					sum = GTE_MAC3_ADD(Mx32 * Vx2);
 					sum = GTE_MAC3_ADD(Mx33 * Vx3);
@@ -1492,6 +1564,12 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_flag_update(ctx);
 				break;
 			}
+
+			case NCDS:
+				FLAG = 0;
+
+				gte_ncd(ctx, VX0, VY0, VZ0);
+				break;
 
 			default:
 				EXC_RAISE(RI);
