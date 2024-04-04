@@ -56,6 +56,7 @@
 #define CT	(CPU_OP_CT)
 #define DIV	(CPU_OP_DIV)
 #define DIVU	(CPU_OP_DIVU)
+#define DPCS	(CPU_OP_DPCS)
 #define J	(CPU_OP_J)
 #define JAL	(CPU_OP_JAL)
 #define JALR	(CPU_OP_JALR)
@@ -145,6 +146,13 @@
 #define SY0	((s16)(SXY0 >> 16))
 #define SY1	((s16)(SXY1 >> 16))
 #define SY2	((s16)(SXY2 >> 16))
+#define RFC	(ctx->cpu.cp2.ccr.RFC)
+#define GFC	(ctx->cpu.cp2.ccr.GFC)
+#define BFC	(ctx->cpu.cp2.ccr.BFC)
+#define RGB0	(ctx->cpu.cp2.cpr.RGB0)
+#define RGB1	(ctx->cpu.cp2.cpr.RGB1)
+#define RGB2	(ctx->cpu.cp2.cpr.RGB2)
+#define RGBC	(ctx->cpu.cp2.cpr.RGBC)
 
 #define CP2_CCR	(ctx->cpu.cp2.ccr.regs)
 #define R11R12	(ctx->cpu.cp2.ccr.R11R12)
@@ -462,6 +470,94 @@ static void gte_rtp(struct psycho_ctx *const ctx, const s16 x, const s16 y,
 	MAC0 = (s32)sum;
 	IR0 = gte_chk_ir0(ctx, (s32)(sum >> 12));
 
+	gte_flag_update(ctx);
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb(struct psycho_ctx *const ctx,
+				     const s32 value, const uint flag)
+{
+	if (value < CPU_CP2_CPR_RGB_MIN) {
+		FLAG |= flag;
+		return CPU_CP2_CPR_RGB_MIN;
+	} else if (value > CPU_CP2_CPR_RGB_MAX) {
+		FLAG |= flag;
+		return CPU_CP2_CPR_RGB_MAX;
+	}
+	return (u32)(u8)value;
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb_r(struct psycho_ctx *const ctx,
+				       const s32 value)
+{
+	return gte_chk_rgb(ctx, value, CPU_CP2_CCR_FLAG_RGB_R_SATURATED);
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb_g(struct psycho_ctx *const ctx,
+				       const s32 value)
+{
+	return gte_chk_rgb(ctx, value, CPU_CP2_CCR_FLAG_RGB_G_SATURATED);
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb_b(struct psycho_ctx *const ctx,
+				       const s32 value)
+{
+	return gte_chk_rgb(ctx, value, CPU_CP2_CCR_FLAG_RGB_B_SATURATED);
+}
+
+static ALWAYS_INLINE void gte_rgb_push(struct psycho_ctx *const ctx)
+{
+	const u32 b = (gte_chk_rgb_b(ctx, MAC3 >> 4)) << 16;
+	const u32 g = (gte_chk_rgb_g(ctx, MAC2 >> 4)) << 8;
+	const u32 r = gte_chk_rgb_r(ctx, MAC1 >> 4);
+
+	RGB0 = RGB1;
+	RGB1 = RGB2;
+	RGB2 = ((RGBC >> 24) << 24) | b | g | r;
+
+	const bool lm = ctx->cpu.instr & CPU_INSTR_LM_FLAG;
+
+	IR1 = gte_chk_ir1(ctx, MAC1, lm);
+	IR2 = gte_chk_ir2(ctx, MAC2, lm);
+	IR3 = gte_chk_ir3(ctx, MAC3, lm);
+}
+
+static void gte_intpl_color(struct psycho_ctx *const ctx)
+{
+	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(ctx->cpu.instr);
+
+	s64 x = (s64)(((u64)RFC << 12) - (u64)MAC1);
+	s64 y = (s64)(((u64)GFC << 12) - (u64)MAC2);
+	s64 z = (s64)(((u64)BFC << 12) - (u64)MAC3);
+
+	(void)gte_mac1_add(ctx, 0, x);
+	(void)gte_mac2_add(ctx, 0, y);
+	(void)gte_mac3_add(ctx, 0, z);
+
+	IR1 = gte_chk_ir1(ctx, (s32)(x >> SHIFT_FRAC), false);
+	IR2 = gte_chk_ir2(ctx, (s32)(y >> SHIFT_FRAC), false);
+	IR3 = gte_chk_ir3(ctx, (s32)(z >> SHIFT_FRAC), false);
+
+	s64 sum = 0;
+	sum = GTE_MAC1_ADD((IR1 * IR0) + MAC1);
+	MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = GTE_MAC2_ADD((IR2 * IR0) + MAC2);
+	MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = GTE_MAC3_ADD((IR3 * IR0) + MAC3);
+	MAC3 = (s32)(sum >> SHIFT_FRAC);
+}
+
+static void gte_dpc(struct psycho_ctx *const ctx, const u32 rgb)
+{
+	MAC1 = (s32)((rgb & 0xFF) << 16);
+	MAC2 = (s32)(((rgb >> 8) & 0xFF) << 16);
+	MAC3 = (s32)(((rgb >> 16) & 0xFF) << 16);
+
+	gte_intpl_color(ctx);
+	gte_rgb_push(ctx);
 	gte_flag_update(ctx);
 }
 
@@ -1126,6 +1222,12 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_flag_update(ctx);
 				break;
 			}
+
+			case DPCS:
+				FLAG = 0;
+
+				gte_dpc(ctx, RGBC);
+				break;
 
 			default:
 				EXC_RAISE(RI);
