@@ -230,12 +230,12 @@ static ALWAYS_INLINE NODISCARD s64 gte_mac123_add(struct psycho_ctx *const ctx,
 						  const uint neg_flag,
 						  const uint pos_flag)
 {
-	const s64 sum = mac + addend;
+	const s64 n = mac + addend;
 
-	gte_ovf_chk(ctx, sum, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
+	gte_ovf_chk(ctx, n, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
 		    neg_flag, pos_flag);
 
-	return sum;
+	return (s64)((u64)n << 20) >> 20; // CHAR_BIT * sizeof(s64) - 44
 }
 
 static NODISCARD s64 gte_mac1_add(struct psycho_ctx *const ctx, const s64 mac,
