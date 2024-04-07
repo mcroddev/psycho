@@ -81,6 +81,8 @@
 #define MULT	(CPU_OP_MULT)
 #define MULTU	(CPU_OP_MULTU)
 #define MVMVA	(CPU_OP_MVMVA)
+#define NCS	(CPU_OP_NCS)
+#define NCT	(CPU_OP_NCT)
 #define NCCS	(CPU_OP_NCCS)
 #define NCDS	(CPU_OP_NCDS)
 #define NCDT	(CPU_OP_NCDT)
@@ -500,6 +502,64 @@ static void gte_dpc(struct psycho_ctx *const ctx, const u32 rgb)
 	MAC3 = (s32)(((rgb >> 16) & 0xFF) << 16);
 
 	gte_intpl_color(ctx);
+	gte_rgb_push(ctx);
+	gte_flag_update(ctx);
+}
+
+static void gte_nc(struct psycho_ctx *const ctx, const s16 x, const s16 y,
+		   const s16 z)
+{
+	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(ctx->cpu.instr);
+
+	s64 sum = 0;
+	sum = gte_mac1_add(ctx, sum, L11 * x);
+	sum = gte_mac1_add(ctx, sum, L12 * y);
+	sum = gte_mac1_add(ctx, sum, L13 * z);
+	MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac2_add(ctx, sum, L21 * x);
+	sum = gte_mac2_add(ctx, sum, L22 * y);
+	sum = gte_mac2_add(ctx, sum, L23 * z);
+	MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac3_add(ctx, sum, L31 * x);
+	sum = gte_mac3_add(ctx, sum, L32 * y);
+	sum = gte_mac3_add(ctx, sum, L33 * z);
+	MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+	const bool lm = ctx->cpu.instr & CPU_INSTR_LM_FLAG;
+
+	IR1 = gte_chk_ir1(ctx, MAC1, lm);
+	IR2 = gte_chk_ir2(ctx, MAC2, lm);
+	IR3 = gte_chk_ir3(ctx, MAC3, lm);
+
+	sum = 0;
+	sum = gte_mac1_add(ctx, sum, (s64)((u64)RBK << 12));
+	sum = gte_mac1_add(ctx, sum, LR1 * IR1);
+	sum = gte_mac1_add(ctx, sum, LR2 * IR2);
+	sum = gte_mac1_add(ctx, sum, LR3 * IR3);
+	MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac2_add(ctx, sum, (s64)((u64)GBK << 12));
+	sum = gte_mac2_add(ctx, sum, LG1 * IR1);
+	sum = gte_mac2_add(ctx, sum, LG2 * IR2);
+	sum = gte_mac2_add(ctx, sum, LG3 * IR3);
+	MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac3_add(ctx, sum, (s64)((u64)BBK << 12));
+	sum = gte_mac3_add(ctx, sum, LB1 * IR1);
+	sum = gte_mac3_add(ctx, sum, LB2 * IR2);
+	sum = gte_mac3_add(ctx, sum, LB3 * IR3);
+	MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+	IR1 = gte_chk_ir1(ctx, MAC1, lm);
+	IR2 = gte_chk_ir2(ctx, MAC2, lm);
+	IR3 = gte_chk_ir3(ctx, MAC3, lm);
+
 	gte_rgb_push(ctx);
 	gte_flag_update(ctx);
 }
@@ -1825,6 +1885,21 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 				break;
 			}
+
+			case NCS:
+				FLAG = 0;
+
+				gte_nc(ctx, VX0, VY0, VZ0);
+				break;
+
+			case NCT:
+				FLAG = 0;
+
+				gte_nc(ctx, VX0, VY0, VZ0);
+				gte_nc(ctx, VX1, VY1, VZ1);
+				gte_nc(ctx, VX2, VY2, VZ2);
+
+				break;
 
 			default:
 				EXC_RAISE(RI);
