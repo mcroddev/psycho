@@ -47,6 +47,8 @@
 #define ADDU	(CPU_OP_ADDU)
 #define AND	(CPU_OP_AND)
 #define ANDI	(CPU_OP_ANDI)
+#define AVSZ3	(CPU_OP_AVSZ3)
+#define AVSZ4	(CPU_OP_AVSZ4)
 #define BEQ	(CPU_OP_BEQ)
 #define BGTZ	(CPU_OP_BGTZ)
 #define BLEZ	(CPU_OP_BLEZ)
@@ -60,6 +62,7 @@
 #define DIVU	(CPU_OP_DIVU)
 #define DCPL	(CPU_OP_DCPL)
 #define DPCS	(CPU_OP_DPCS)
+#define DPCT	(CPU_OP_DPCT)
 #define INTPL	(CPU_OP_INTPL)
 #define J	(CPU_OP_J)
 #define JAL	(CPU_OP_JAL)
@@ -94,6 +97,7 @@
 #define ORI	(CPU_OP_ORI)
 #define RFE	(CPU_OP_RFE)
 #define RTPS	(CPU_OP_RTPS)
+#define RTPT	(CPU_OP_RTPT)
 #define SB	(CPU_OP_SB)
 #define SH	(CPU_OP_SH)
 #define SLL	(CPU_OP_SLL)
@@ -227,6 +231,8 @@
 #define LG3	((s16)(LG2LG3 >> 16))
 #define LB1	((s16)(LB1LB2 & 0xFFFF))
 #define LB2	((s16)(LB1LB2 >> 16))
+#define ZSF3	(ctx->cpu.cp2.ccr.ZSF3)
+#define ZSF4	(ctx->cpu.cp2.ccr.ZSF4)
 
 #define AdEL	(PSYCHO_CPU_EXC_CODE_AdEL)
 #define AdES	(PSYCHO_CPU_EXC_CODE_AdES)
@@ -811,6 +817,23 @@ static void gte_ncc(struct psycho_ctx *const ctx, const s16 x, const s16 y,
 	MAC3 = (s32)sum;
 
 	gte_rgb_push(ctx);
+	gte_flag_update(ctx);
+}
+
+static void gte_avsz(struct psycho_ctx *const restrict ctx,
+		     const s16 scale_factor, const u16 sz_oldest,
+		     const u16 sz_older, const u16 sz_old, const u16 sz_new)
+{
+	FLAG = 0;
+
+	const s64 sum =
+		gte_mac0_add(ctx, (s64)(scale_factor) * (sz_oldest + sz_older +
+							 sz_old + sz_new));
+	MAC0 = (s32)sum;
+
+	const s32 n = (s32)(sum >> 12);
+
+	OTZ = gte_chk_sz3_otz(ctx, n);
 	gte_flag_update(ctx);
 }
 
@@ -1951,6 +1974,32 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_intpl_color(ctx);
 				gte_rgb_push(ctx);
 				gte_flag_update(ctx);
+
+				break;
+
+			case DPCT:
+				FLAG = 0;
+
+				gte_dpc(ctx, RGB0);
+				gte_dpc(ctx, RGB0);
+				gte_dpc(ctx, RGB0);
+
+				break;
+
+			case AVSZ3:
+				gte_avsz(ctx, ZSF3, 0, SZ1, SZ2, SZ3);
+				break;
+
+			case AVSZ4:
+				gte_avsz(ctx, ZSF4, SZ0, SZ1, SZ2, SZ3);
+				break;
+
+			case RTPT:
+				FLAG = 0;
+
+				gte_rtp(ctx, VX0, VY0, VZ0);
+				gte_rtp(ctx, VX1, VY1, VZ1);
+				gte_rtp(ctx, VX2, VY2, VZ2);
 
 				break;
 
