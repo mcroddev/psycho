@@ -410,9 +410,6 @@
 #define CPU_CP2_CPR_SZ3_OTZ_MIN	(0)
 #define CPU_CP2_CPR_SZ3_OTZ_MAX	((1 << 16) - 1)
 
-#define CPU_CP2_CPR_RGB_MIN	(0)
-#define CPU_CP2_CPR_RGB_MAX	((1 << 8) - 1)
-
 #define CPU_INSTR_LM_FLAG (1 << 10)
 #define CPU_INSTR_SF_FLAG (1 << 19)
 
