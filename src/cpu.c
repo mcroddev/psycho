@@ -63,6 +63,8 @@
 #define DCPL	(CPU_OP_DCPL)
 #define DPCS	(CPU_OP_DPCS)
 #define DPCT	(CPU_OP_DPCT)
+#define GPF	(CPU_OP_GPF)
+#define GPL	(CPU_OP_GPL)
 #define INTPL	(CPU_OP_INTPL)
 #define J	(CPU_OP_J)
 #define JAL	(CPU_OP_JAL)
@@ -91,6 +93,7 @@
 #define NCDS	(CPU_OP_NCDS)
 #define NCDT	(CPU_OP_NCDT)
 #define NCLIP	(CPU_OP_NCLIP)
+#define NCCT	(CPU_OP_NCCT)
 #define NOR	(CPU_OP_NOR)
 #define OP	(CPU_OP_OP)
 #define OR	(CPU_OP_OR)
@@ -1953,7 +1956,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 				break;
 			}
 
-			case DCPL:
+			case DCPL: {
 				FLAG = 0;
 
 				s64 sum = gte_mac1_add(
@@ -1977,6 +1980,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_flag_update(ctx);
 
 				break;
+			}
 
 			case DPCT:
 				FLAG = 0;
@@ -2001,6 +2005,52 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_rtp(ctx, VX0, VY0, VZ0, false);
 				gte_rtp(ctx, VX1, VY1, VZ1, false);
 				gte_rtp(ctx, VX2, VY2, VZ2, true);
+
+				break;
+
+			case GPF:
+				MAC1 = 0;
+				MAC2 = 0;
+				MAC3 = 0;
+				FALLTHROUGH;
+
+			case GPL: {
+				FLAG = 0;
+
+				const uint SHIFT_FRAC =
+					cpu_instr_shift_frac_get(
+						ctx->cpu.instr);
+
+				s64 sum = 0;
+				sum = gte_mac1_add(ctx, sum, IR1 * IR0);
+				sum = gte_mac1_add(ctx, sum,
+						   (s64)((u64)MAC1 << SHIFT_FRAC));
+				MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = 0;
+				sum = gte_mac2_add(ctx, sum, IR2 * IR0);
+				sum = gte_mac2_add(ctx, sum,
+						   (s64)((u64)MAC2 << SHIFT_FRAC));
+				MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = 0;
+				sum = gte_mac3_add(ctx, sum, IR3 * IR0);
+				sum = gte_mac3_add(ctx, sum,
+						   (s64)((u64)MAC3 << SHIFT_FRAC));
+				MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+				gte_rgb_push(ctx);
+				gte_flag_update(ctx);
+
+				break;
+			}
+
+			case NCCT:
+				FLAG = 0;
+
+				gte_ncc(ctx, VX0, VY0, VZ0);
+				gte_ncc(ctx, VX1, VY1, VZ1);
+				gte_ncc(ctx, VX2, VY2, VZ2);
 
 				break;
 

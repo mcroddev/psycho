@@ -50,3 +50,6 @@
 
 /// @brief This branch is likely to be executed.
 #define likely(x) (__builtin_expect(!!(x), 1))
+
+/// @brief This case label is intended to fall through.
+#define FALLTHROUGH __attribute__((fallthrough))
