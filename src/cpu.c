@@ -725,15 +725,27 @@ static void gte_ncc(struct psycho_ctx *const ctx, const s16 x, const s16 y,
 
 	sum = 0;
 	sum = gte_mac1_add(ctx, sum, ((RGBC & 0xFF) * (u32)IR1) << 4);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
+	MAC1 = (s32)sum;
 
 	sum = 0;
 	sum = gte_mac2_add(ctx, sum, (((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
+	MAC2 = (s32)sum;
 
 	sum = 0;
 	sum = gte_mac3_add(ctx, sum, (((RGBC >> 16) & 0xFF) * (u32)IR3) << 4);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
+	MAC3 = (s32)sum;
+
+	sum = 0;
+	sum = gte_mac1_add(ctx, sum, MAC1 >> SHIFT_FRAC);
+	MAC1 = (s32)sum;
+
+	sum = 0;
+	sum = gte_mac2_add(ctx, sum, MAC2 >> SHIFT_FRAC);
+	MAC2 = (s32)sum;
+
+	sum = 0;
+	sum = gte_mac3_add(ctx, sum, MAC3 >> SHIFT_FRAC);
+	MAC3 = (s32)sum;
 
 	gte_rgb_push(ctx);
 	gte_flag_update(ctx);
