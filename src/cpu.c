@@ -52,6 +52,7 @@
 #define BLEZ	(CPU_OP_BLEZ)
 #define BNE	(CPU_OP_BNE)
 #define BREAK	(CPU_OP_BREAK)
+#define CC	(CPU_OP_CC)
 #define CDP	(CPU_OP_CDP)
 #define CF	(CPU_OP_CF)
 #define CT	(CPU_OP_CT)
@@ -1585,8 +1586,8 @@ void cpu_step(struct psycho_ctx *const ctx)
 						CPU_INSTR_LM_FLAG;
 
 				if (tx == 2) {
-					sum = gte_mac1_add(ctx, 0,
-							   (s64)((u64)Tx1 << 12));
+					sum = gte_mac1_add(
+						ctx, 0, (s64)((u64)Tx1 << 12));
 					sum = gte_mac1_add(ctx, sum,
 							   Mx11 * Vx1);
 					MAC1 = (s32)(sum >> SHIFT_FRAC);
@@ -1598,8 +1599,8 @@ void cpu_step(struct psycho_ctx *const ctx)
 					MAC1 = (s32)(sum >> SHIFT_FRAC);
 					IR1 = gte_chk_ir1(ctx, MAC1, lm);
 
-					sum = gte_mac2_add(ctx, 0,
-							   (s64)((u64)Tx2 << 12));
+					sum = gte_mac2_add(
+						ctx, 0, (s64)((u64)Tx2 << 12));
 					sum = gte_mac2_add(ctx, sum,
 							   Mx21 * Vx1);
 					MAC2 = (s32)(sum >> SHIFT_FRAC);
@@ -1611,8 +1612,8 @@ void cpu_step(struct psycho_ctx *const ctx)
 					MAC2 = (s32)(sum >> SHIFT_FRAC);
 					IR2 = gte_chk_ir2(ctx, MAC2, lm);
 
-					sum = gte_mac3_add(ctx, 0,
-							   (s64)((u64)Tx3 << 12));
+					sum = gte_mac3_add(
+						ctx, 0, (s64)((u64)Tx3 << 12));
 					sum = gte_mac3_add(ctx, sum,
 							   Mx31 * Vx1);
 					MAC3 = (s32)(sum >> SHIFT_FRAC);
@@ -1624,8 +1625,8 @@ void cpu_step(struct psycho_ctx *const ctx)
 					MAC3 = (s32)(sum >> SHIFT_FRAC);
 					IR3 = gte_chk_ir3(ctx, MAC3, lm);
 				} else {
-					sum = gte_mac1_add(ctx, 0,
-							   (s64)((u64)Tx1 << 12));
+					sum = gte_mac1_add(
+						ctx, 0, (s64)((u64)Tx1 << 12));
 					sum = gte_mac1_add(ctx, sum,
 							   Mx11 * Vx1);
 					sum = gte_mac1_add(ctx, sum,
@@ -1634,8 +1635,8 @@ void cpu_step(struct psycho_ctx *const ctx)
 							   Mx13 * Vx3);
 					MAC1 = (s32)(sum >> SHIFT_FRAC);
 
-					sum = gte_mac2_add(ctx, 0,
-							   (s64)((u64)Tx2 << 12));
+					sum = gte_mac2_add(
+						ctx, 0, (s64)((u64)Tx2 << 12));
 					sum = gte_mac2_add(ctx, sum,
 							   Mx21 * Vx1);
 					sum = gte_mac2_add(ctx, sum,
@@ -1644,8 +1645,8 @@ void cpu_step(struct psycho_ctx *const ctx)
 							   Mx23 * Vx3);
 					MAC2 = (s32)(sum >> SHIFT_FRAC);
 
-					sum = gte_mac3_add(ctx, 0,
-							   (s64)((u64)Tx3 << 12));
+					sum = gte_mac3_add(
+						ctx, 0, (s64)((u64)Tx3 << 12));
 					sum = gte_mac3_add(ctx, sum,
 							   Mx31 * Vx1);
 					sum = gte_mac3_add(ctx, sum,
@@ -1746,6 +1747,84 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 				gte_ncc(ctx, VX0, VY0, VZ0);
 				break;
+
+			case CC: {
+				FLAG = 0;
+
+				const uint SHIFT_FRAC =
+					cpu_instr_shift_frac_get(
+						ctx->cpu.instr);
+
+				s64 sum = 0;
+				sum = gte_mac1_add(ctx, sum,
+						   (s64)((u64)RBK << 12));
+				sum = gte_mac1_add(ctx, sum, LR1 * IR1);
+				sum = gte_mac1_add(ctx, sum, LR2 * IR2);
+				sum = gte_mac1_add(ctx, sum, LR3 * IR3);
+				MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = 0;
+				sum = gte_mac2_add(ctx, sum,
+						   (s64)((u64)GBK << 12));
+				sum = gte_mac2_add(ctx, sum, LG1 * IR1);
+				sum = gte_mac2_add(ctx, sum, LG2 * IR2);
+				sum = gte_mac2_add(ctx, sum, LG3 * IR3);
+				MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = 0;
+				sum = gte_mac3_add(ctx, sum,
+						   (s64)((u64)BBK << 12));
+				sum = gte_mac3_add(ctx, sum, LB1 * IR1);
+				sum = gte_mac3_add(ctx, sum, LB2 * IR2);
+				sum = gte_mac3_add(ctx, sum, LB3 * IR3);
+				MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+				const bool lm = ctx->cpu.instr &
+						CPU_INSTR_LM_FLAG;
+
+				IR1 = gte_chk_ir1(ctx, MAC1, lm);
+				IR2 = gte_chk_ir2(ctx, MAC2, lm);
+				IR3 = gte_chk_ir3(ctx, MAC3, lm);
+
+				sum = 0;
+				sum = gte_mac1_add(ctx, sum,
+						   ((RGBC & 0xFF) * (u32)IR1)
+							   << 4);
+				MAC1 = (s32)sum;
+
+				sum = 0;
+				sum = gte_mac2_add(
+					ctx, sum,
+					(((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
+				MAC2 = (s32)sum;
+
+				sum = 0;
+				sum = gte_mac3_add(
+					ctx, sum,
+					(((RGBC >> 16) & 0xFF) * (u32)IR3)
+						<< 4);
+				MAC3 = (s32)sum;
+
+				sum = 0;
+				sum = gte_mac1_add(ctx, sum,
+						   MAC1 >> SHIFT_FRAC);
+				MAC1 = (s32)sum;
+
+				sum = 0;
+				sum = gte_mac2_add(ctx, sum,
+						   MAC2 >> SHIFT_FRAC);
+				MAC2 = (s32)sum;
+
+				sum = 0;
+				sum = gte_mac3_add(ctx, sum,
+						   MAC3 >> SHIFT_FRAC);
+				MAC3 = (s32)sum;
+
+				gte_rgb_push(ctx);
+				gte_flag_update(ctx);
+
+				break;
+			}
 
 			default:
 				EXC_RAISE(RI);
