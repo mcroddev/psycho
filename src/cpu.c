@@ -644,7 +644,7 @@ static void gte_ncd(struct psycho_ctx *const ctx, const s16 x, const s16 y,
 }
 
 static void gte_rtp(struct psycho_ctx *const ctx, const s16 x, const s16 y,
-		    const s16 z)
+		    const s16 z, const bool is_last_vertex)
 {
 	static const u8 unr_table[] = {
 		0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE,
@@ -731,10 +731,11 @@ static void gte_rtp(struct psycho_ctx *const ctx, const s16 x, const s16 y,
 
 	gte_sxy_push(ctx, sx, sy);
 
-	sum = gte_mac0_add(ctx, (quot * DQA) + DQB);
-	MAC0 = (s32)sum;
-	IR0 = gte_chk_ir0(ctx, (s32)(sum >> 12));
-
+	if (is_last_vertex) {
+		sum = gte_mac0_add(ctx, (quot * DQA) + DQB);
+		MAC0 = (s32)sum;
+		IR0 = gte_chk_ir0(ctx, (s32)(sum >> 12));
+	}
 	gte_flag_update(ctx);
 }
 
@@ -1455,7 +1456,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 			case RTPS:
 				FLAG = 0;
 
-				gte_rtp(ctx, VX0, VY0, VZ0);
+				gte_rtp(ctx, VX0, VY0, VZ0, true);
 				break;
 
 			case NCLIP: {
@@ -1997,9 +1998,9 @@ void cpu_step(struct psycho_ctx *const ctx)
 			case RTPT:
 				FLAG = 0;
 
-				gte_rtp(ctx, VX0, VY0, VZ0);
-				gte_rtp(ctx, VX1, VY1, VZ1);
-				gte_rtp(ctx, VX2, VY2, VZ2);
+				gte_rtp(ctx, VX0, VY0, VZ0, false);
+				gte_rtp(ctx, VX1, VY1, VZ1, false);
+				gte_rtp(ctx, VX2, VY2, VZ2, true);
 
 				break;
 
