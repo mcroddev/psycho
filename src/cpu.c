@@ -101,6 +101,7 @@
 #define SLTI	(CPU_OP_SLTI)
 #define SLTIU	(CPU_OP_SLTIU)
 #define SLTU	(CPU_OP_SLTU)
+#define SQR	(CPU_OP_SQR)
 #define SRA	(CPU_OP_SRA)
 #define SRAV	(CPU_OP_SRAV)
 #define SRL	(CPU_OP_SRL)
@@ -1900,6 +1901,32 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_nc(ctx, VX2, VY2, VZ2);
 
 				break;
+
+			case SQR: {
+				FLAG = 0;
+
+				const uint SHIFT_FRAC =
+					cpu_instr_shift_frac_get(
+						ctx->cpu.instr);
+
+				s64 sum;
+
+				sum = gte_mac1_add(ctx, 0, IR1 * IR1);
+				MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = gte_mac2_add(ctx, 0, IR2 * IR2);
+				MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+				sum = gte_mac3_add(ctx, 0, IR3 * IR3);
+				MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+				IR1 = gte_chk_ir1(ctx, MAC1, true);
+				IR2 = gte_chk_ir2(ctx, MAC2, true);
+				IR3 = gte_chk_ir3(ctx, MAC3, true);
+
+				gte_flag_update(ctx);
+				break;
+			}
 
 			default:
 				EXC_RAISE(RI);
