@@ -57,7 +57,6 @@
 #define DIV	(CPU_OP_DIV)
 #define DIVU	(CPU_OP_DIVU)
 #define DPCS	(CPU_OP_DPCS)
-#define INTPL	(CPU_OP_INTPL)
 #define J	(CPU_OP_J)
 #define JAL	(CPU_OP_JAL)
 #define JALR	(CPU_OP_JALR)
@@ -1228,19 +1227,6 @@ void cpu_step(struct psycho_ctx *const ctx)
 				FLAG = 0;
 
 				gte_dpc(ctx, RGBC);
-				break;
-
-			case INTPL:
-				FLAG = 0;
-
-				MAC1 = IR1 << 12;
-				MAC2 = IR2 << 12;
-				MAC3 = IR3 << 12;
-
-				gte_intpl_color(ctx);
-				gte_rgb_push(ctx);
-				gte_flag_update(ctx);
-
 				break;
 
 			default:
