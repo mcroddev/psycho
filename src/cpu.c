@@ -182,11 +182,6 @@
 
 #define IsC	(CPU_CP0_CPR_SR_IsC)
 
-#define GTE_MAC0_ADD(x)	(gte_mac0_add(ctx, (x)))
-#define GTE_MAC1_ADD(x) (gte_mac1_add(ctx, (sum), (x)))
-#define GTE_MAC2_ADD(x) (gte_mac2_add(ctx, (sum), (x)))
-#define GTE_MAC3_ADD(x) (gte_mac3_add(ctx, (sum), (x)))
-
 // clang-format on
 
 const char *const exc_code_names[] = { [AdEL] = "Address error on load",
@@ -230,12 +225,12 @@ static ALWAYS_INLINE NODISCARD s64 gte_mac123_add(struct psycho_ctx *const ctx,
 						  const uint neg_flag,
 						  const uint pos_flag)
 {
-	const s64 n = mac + addend;
+	const s64 sum = mac + addend;
 
-	gte_ovf_chk(ctx, n, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
+	gte_ovf_chk(ctx, sum, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
 		    neg_flag, pos_flag);
 
-	return (s64)((u64)n << 20) >> 20; // CHAR_BIT * sizeof(s64) - 44
+	return (s64)((u64)sum << 20) >> 20; // CHAR_BIT * sizeof(s64) - 44
 }
 
 static NODISCARD s64 gte_mac1_add(struct psycho_ctx *const ctx, const s64 mac,
@@ -396,24 +391,24 @@ static void gte_rtp(struct psycho_ctx *const ctx, const s16 x, const s16 y,
 	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(ctx->cpu.instr);
 
 	s64 sum = 0;
-	sum = GTE_MAC1_ADD((s64)((u64)TRX << 12));
-	sum = GTE_MAC1_ADD(RT11 * x);
-	sum = GTE_MAC1_ADD(RT12 * y);
-	sum = GTE_MAC1_ADD(RT13 * z);
+	sum = gte_mac1_add(ctx, sum, (s64)((u64)TRX << 12));
+	sum = gte_mac1_add(ctx, sum, RT11 * x);
+	sum = gte_mac1_add(ctx, sum, RT12 * y);
+	sum = gte_mac1_add(ctx, sum, RT13 * z);
 	MAC1 = (s32)(sum >> SHIFT_FRAC);
 
 	sum = 0;
-	sum = GTE_MAC2_ADD((s64)((u64)TRY << 12));
-	sum = GTE_MAC2_ADD(RT21 * x);
-	sum = GTE_MAC2_ADD(RT22 * y);
-	sum = GTE_MAC2_ADD(RT23 * z);
+	sum = gte_mac2_add(ctx, sum, (s64)((u64)TRY << 12));
+	sum = gte_mac2_add(ctx, sum, RT21 * x);
+	sum = gte_mac2_add(ctx, sum, RT22 * y);
+	sum = gte_mac2_add(ctx, sum, RT23 * z);
 	MAC2 = (s32)(sum >> SHIFT_FRAC);
 
 	sum = 0;
-	sum = GTE_MAC3_ADD((s64)((u64)TRZ << 12));
-	sum = GTE_MAC3_ADD(RT31 * x);
-	sum = GTE_MAC3_ADD(RT32 * y);
-	sum = GTE_MAC3_ADD(RT33 * z);
+	sum = gte_mac3_add(ctx, sum, (s64)((u64)TRZ << 12));
+	sum = gte_mac3_add(ctx, sum, RT31 * x);
+	sum = gte_mac3_add(ctx, sum, RT32 * y);
+	sum = gte_mac3_add(ctx, sum, RT33 * z);
 	MAC3 = (s32)(sum >> SHIFT_FRAC);
 
 	gte_sz_push(ctx, sum);
@@ -441,15 +436,15 @@ static void gte_rtp(struct psycho_ctx *const ctx, const s16 x, const s16 y,
 		FLAG |= CPU_CP2_CCR_FLAG_DIV_OVF;
 	}
 
-	sum = GTE_MAC0_ADD((quot * IR1) + OFX);
+	sum = gte_mac0_add(ctx, (quot * IR1) + OFX);
 	const s16 sx = gte_chk_sx2(ctx, (s32)(sum >> 16));
 
-	sum = GTE_MAC0_ADD((quot * IR2) + OFY);
+	sum = gte_mac0_add(ctx, (quot * IR2) + OFY);
 	const s16 sy = gte_chk_sy2(ctx, (s32)(sum >> 16));
 
 	gte_sxy_push(ctx, sx, sy);
 
-	sum = GTE_MAC0_ADD((quot * DQA) + DQB);
+	sum = gte_mac0_add(ctx, (quot * DQA) + DQB);
 	MAC0 = (s32)sum;
 	IR0 = gte_chk_ir0(ctx, (s32)(sum >> 12));
 
