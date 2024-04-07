@@ -78,6 +78,8 @@
 #define MTLO	(CPU_OP_MTLO)
 #define MULT	(CPU_OP_MULT)
 #define MULTU	(CPU_OP_MULTU)
+#define MVMVA	(CPU_OP_MVMVA)
+#define NCDS	(CPU_OP_NCDS)
 #define NCLIP	(CPU_OP_NCLIP)
 #define NOR	(CPU_OP_NOR)
 #define OP	(CPU_OP_OP)
@@ -154,6 +156,15 @@
 #define RGB1	(ctx->cpu.cp2.cpr.RGB1)
 #define RGB2	(ctx->cpu.cp2.cpr.RGB2)
 #define RGBC	(ctx->cpu.cp2.cpr.RGBC)
+#define VX0	((s16)(VXY0 & 0xFFFF))
+#define VX1	((s16)(ctx->cpu.cp2.cpr.VXY1 & 0xFFFF))
+#define VX2	((s16)(ctx->cpu.cp2.cpr.VXY2 & 0xFFFF))
+#define VY0	((s16)(VXY0 >> 16))
+#define VY1	((s16)(ctx->cpu.cp2.cpr.VXY1 >> 16))
+#define VY2	((s16)(ctx->cpu.cp2.cpr.VXY2 >> 16))
+#define VZ0	(ctx->cpu.cp2.cpr.VZ0)
+#define VZ1	(ctx->cpu.cp2.cpr.VZ1)
+#define VZ2	(ctx->cpu.cp2.cpr.VZ2)
 
 #define CP2_CCR	(ctx->cpu.cp2.ccr.regs)
 #define R11R12	(ctx->cpu.cp2.ccr.R11R12)
@@ -179,6 +190,35 @@
 #define H	(ctx->cpu.cp2.ccr.H)
 #define OFX	(ctx->cpu.cp2.ccr.OFX)
 #define OFY	(ctx->cpu.cp2.ccr.OFY)
+#define RBK	(ctx->cpu.cp2.ccr.RBK)
+#define GBK	(ctx->cpu.cp2.ccr.GBK)
+#define BBK	(ctx->cpu.cp2.ccr.BBK)
+#define L11L12	(ctx->cpu.cp2.ccr.L11L12)
+#define L13L21	(ctx->cpu.cp2.ccr.L13L21)
+#define L22L23	(ctx->cpu.cp2.ccr.L22L23)
+#define L31L32	(ctx->cpu.cp2.ccr.L31L32)
+#define L11	((s16)(L11L12 & 0xFFFF))
+#define L12	((s16)(L11L12 >> 16))
+#define L13	((s16)(L13L21 & 0xFFFF))
+#define L21	((s16)(L13L21 >> 16))
+#define L22	((s16)(L22L23 & 0xFFFF))
+#define L23	((s16)(L22L23 >> 16))
+#define L31	((s16)(L31L32 & 0xFFFF))
+#define L32	((s16)(L31L32 >> 16))
+#define L33	(ctx->cpu.cp2.ccr.L33)
+#define LR1LR2	(ctx->cpu.cp2.ccr.LR1LR2)
+#define LR3LG1	(ctx->cpu.cp2.ccr.LR3LG1)
+#define LG2LG3	(ctx->cpu.cp2.ccr.LG2LG3)
+#define LB1LB2	(ctx->cpu.cp2.ccr.LB1LB2)
+#define LB3	(ctx->cpu.cp2.ccr.LB3)
+#define LR1	((s16)(LR1LR2 & 0xFFFF))
+#define LR2	((s16)(LR1LR2 >> 16))
+#define LR3	((s16)(LR3LG1 & 0xFFFF))
+#define LG1	((s16)(LR3LG1 >> 16))
+#define LG2	((s16)(LG2LG3 & 0xFFFF))
+#define LG3	((s16)(LG2LG3 >> 16))
+#define LB1	((s16)(LB1LB2 & 0xFFFF))
+#define LB2	((s16)(LB1LB2 >> 16))
 
 #define AdEL	(PSYCHO_CPU_EXC_CODE_AdEL)
 #define AdES	(PSYCHO_CPU_EXC_CODE_AdES)
@@ -454,6 +494,77 @@ static void gte_dpc(struct psycho_ctx *const ctx, const u32 rgb)
 	MAC1 = (s32)((rgb & 0xFF) << 16);
 	MAC2 = (s32)(((rgb >> 8) & 0xFF) << 16);
 	MAC3 = (s32)(((rgb >> 16) & 0xFF) << 16);
+
+	gte_intpl_color(ctx);
+	gte_rgb_push(ctx);
+	gte_flag_update(ctx);
+}
+
+static void gte_ncd(struct psycho_ctx *const ctx, const s16 x, const s16 y,
+		    const s16 z)
+{
+	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(ctx->cpu.instr);
+
+	s64 sum = 0;
+	sum = gte_mac1_add(ctx, sum, L11 * x);
+	sum = gte_mac1_add(ctx, sum, L12 * y);
+	sum = gte_mac1_add(ctx, sum, L13 * z);
+	MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac2_add(ctx, sum, L21 * x);
+	sum = gte_mac2_add(ctx, sum, L22 * y);
+	sum = gte_mac2_add(ctx, sum, L23 * z);
+	MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac3_add(ctx, sum, L31 * x);
+	sum = gte_mac3_add(ctx, sum, L32 * y);
+	sum = gte_mac3_add(ctx, sum, L33 * z);
+	MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+	const bool lm = ctx->cpu.instr & CPU_INSTR_LM_FLAG;
+
+	IR1 = gte_chk_ir1(ctx, MAC1, lm);
+	IR2 = gte_chk_ir2(ctx, MAC2, lm);
+	IR3 = gte_chk_ir3(ctx, MAC3, lm);
+
+	sum = 0;
+	sum = gte_mac1_add(ctx, sum, (s64)((u64)RBK << 12));
+	sum = gte_mac1_add(ctx, sum, LR1 * IR1);
+	sum = gte_mac1_add(ctx, sum, LR2 * IR2);
+	sum = gte_mac1_add(ctx, sum, LR3 * IR3);
+	MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac2_add(ctx, sum, (s64)((u64)GBK << 12));
+	sum = gte_mac2_add(ctx, sum, LG1 * IR1);
+	sum = gte_mac2_add(ctx, sum, LG2 * IR2);
+	sum = gte_mac2_add(ctx, sum, LG3 * IR3);
+	MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+	sum = 0;
+	sum = gte_mac3_add(ctx, sum, (s64)((u64)BBK << 12));
+	sum = gte_mac3_add(ctx, sum, LB1 * IR1);
+	sum = gte_mac3_add(ctx, sum, LB2 * IR2);
+	sum = gte_mac3_add(ctx, sum, LB3 * IR3);
+	MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+	IR1 = gte_chk_ir1(ctx, MAC1, lm);
+	IR2 = gte_chk_ir2(ctx, MAC2, lm);
+	IR3 = gte_chk_ir3(ctx, MAC3, lm);
+
+	sum = 0;
+	sum = gte_mac1_add(ctx, sum, ((RGBC & 0xFF) * (u32)IR1) << 4);
+	MAC1 = (s32)sum;
+
+	sum = 0;
+	sum = gte_mac2_add(ctx, sum, (((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
+	MAC2 = (s32)sum;
+
+	sum = 0;
+	sum = gte_mac3_add(ctx, sum, (((RGBC >> 16) & 0xFF) * (u32)IR3) << 4);
+	MAC3 = (s32)sum;
 
 	gte_intpl_color(ctx);
 	gte_rgb_push(ctx);
@@ -1238,6 +1349,238 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_rgb_push(ctx);
 				gte_flag_update(ctx);
 
+				break;
+
+			case MVMVA: {
+				FLAG = 0;
+
+				s32 Tx1;
+				s32 Tx2;
+				s32 Tx3;
+				s16 Vx1;
+				s16 Vx2;
+				s16 Vx3;
+				s16 Mx11;
+				s16 Mx12;
+				s16 Mx13;
+				s16 Mx21;
+				s16 Mx22;
+				s16 Mx23;
+				s16 Mx31;
+				s16 Mx32;
+				s16 Mx33;
+
+				const uint mx =
+					cpu_instr_mx_get(ctx->cpu.instr);
+				const uint vx =
+					cpu_instr_vx_get(ctx->cpu.instr);
+				const uint tx =
+					cpu_instr_tx_get(ctx->cpu.instr);
+
+				switch (mx) {
+				case 0:
+					Mx11 = RT11;
+					Mx12 = RT12;
+					Mx13 = RT13;
+					Mx21 = RT21;
+					Mx22 = RT22;
+					Mx23 = RT23;
+					Mx31 = RT31;
+					Mx32 = RT32;
+					Mx33 = RT33;
+
+					break;
+
+				case 1:
+					Mx11 = L11;
+					Mx12 = L12;
+					Mx13 = L13;
+					Mx21 = L21;
+					Mx22 = L22;
+					Mx23 = L23;
+					Mx31 = L31;
+					Mx32 = L32;
+					Mx33 = L33;
+
+					break;
+
+				case 2:
+					Mx11 = LR1;
+					Mx12 = LR2;
+					Mx13 = LR3;
+					Mx21 = LG1;
+					Mx22 = LG2;
+					Mx23 = LG3;
+					Mx31 = LB1;
+					Mx32 = LB2;
+					Mx33 = LB3;
+
+					break;
+
+				case 3:
+					Mx11 = (s16) - ((RGBC & 0xFF) << 4);
+					Mx12 = (s16)((RGBC & 0xFF) << 4);
+					Mx13 = IR0;
+					Mx21 = RT13;
+					Mx22 = RT13;
+					Mx23 = RT13;
+					Mx31 = RT22;
+					Mx32 = RT22;
+					Mx33 = RT22;
+
+					break;
+
+				default:
+					UNREACHABLE;
+				}
+
+				switch (vx) {
+				case 0:
+					Vx1 = VX0;
+					Vx2 = VY0;
+					Vx3 = VZ0;
+					break;
+
+				case 1:
+					Vx1 = VX1;
+					Vx2 = VY1;
+					Vx3 = VZ1;
+					break;
+
+				case 2:
+					Vx1 = VX2;
+					Vx2 = VY2;
+					Vx3 = VZ2;
+					break;
+
+				case 3:
+					Vx1 = IR1;
+					Vx2 = IR2;
+					Vx3 = IR3;
+					break;
+
+				default:
+					UNREACHABLE;
+				}
+
+				switch (tx) {
+				case 0:
+					Tx1 = TRX;
+					Tx2 = TRY;
+					Tx3 = TRZ;
+					break;
+
+				case 1:
+					Tx1 = RBK;
+					Tx2 = GBK;
+					Tx3 = BBK;
+					break;
+
+				case 2:
+					Tx1 = RFC;
+					Tx2 = GFC;
+					Tx3 = BFC;
+					break;
+
+				case 3:
+					Tx1 = 0;
+					Tx2 = 0;
+					Tx3 = 0;
+					break;
+
+				default:
+					UNREACHABLE;
+				}
+
+				s64 sum;
+				const uint SHIFT_FRAC =
+					cpu_instr_shift_frac_get(
+						ctx->cpu.instr);
+				const bool lm = ctx->cpu.instr &
+						CPU_INSTR_LM_FLAG;
+
+				if (tx == 2) {
+					sum = gte_mac1_add(ctx, 0,
+							   (s64)(u64)Tx1 << 12);
+					sum = gte_mac1_add(ctx, sum,
+							   Mx11 * Vx1);
+					MAC1 = (s32)(sum >> SHIFT_FRAC);
+					IR1 = gte_chk_ir1(ctx, MAC1, false);
+
+					sum = gte_mac1_add(ctx, 0, Mx12 * Vx2);
+					sum = gte_mac1_add(ctx, sum,
+							   Mx13 * Vx3);
+					MAC1 = (s32)(sum >> SHIFT_FRAC);
+					IR1 = gte_chk_ir1(ctx, MAC1, lm);
+
+					sum = gte_mac2_add(ctx, 0,
+							   (s64)(u64)Tx2 << 12);
+					sum = gte_mac2_add(ctx, sum,
+							   Mx21 * Vx1);
+					MAC2 = (s32)(sum >> SHIFT_FRAC);
+					IR2 = gte_chk_ir2(ctx, MAC2, false);
+
+					sum = gte_mac2_add(ctx, 0, Mx22 * Vx2);
+					sum = gte_mac2_add(ctx, sum,
+							   Mx23 * Vx3);
+					MAC2 = (s32)(sum >> SHIFT_FRAC);
+					IR2 = gte_chk_ir2(ctx, MAC2, lm);
+
+					sum = gte_mac3_add(ctx, 0,
+							   (s64)(u64)Tx3 << 12);
+					sum = gte_mac3_add(ctx, sum,
+							   Mx31 * Vx1);
+					MAC3 = (s32)(sum >> SHIFT_FRAC);
+					IR3 = gte_chk_ir3(ctx, MAC3, false);
+
+					sum = gte_mac3_add(ctx, 0, Mx32 * Vx2);
+					sum = gte_mac3_add(ctx, sum,
+							   Mx33 * Vx3);
+					MAC3 = (s32)(sum >> SHIFT_FRAC);
+					IR3 = gte_chk_ir3(ctx, MAC3, lm);
+				} else {
+					sum = gte_mac1_add(ctx, 0,
+							   (s64)(u64)Tx1 << 12);
+					sum = gte_mac1_add(ctx, sum,
+							   Mx11 * Vx1);
+					sum = gte_mac1_add(ctx, sum,
+							   Mx12 * Vx2);
+					sum = gte_mac1_add(ctx, sum,
+							   Mx13 * Vx3);
+					MAC1 = (s32)(sum >> SHIFT_FRAC);
+
+					sum = gte_mac2_add(ctx, 0,
+							   (s64)(u64)Tx2 << 12);
+					sum = gte_mac2_add(ctx, sum,
+							   Mx21 * Vx1);
+					sum = gte_mac2_add(ctx, sum,
+							   Mx22 * Vx2);
+					sum = gte_mac2_add(ctx, sum,
+							   Mx23 * Vx3);
+					MAC2 = (s32)(sum >> SHIFT_FRAC);
+
+					sum = gte_mac3_add(ctx, 0,
+							   (s64)(u64)Tx3 << 12);
+					sum = gte_mac3_add(ctx, sum,
+							   Mx31 * Vx1);
+					sum = gte_mac3_add(ctx, sum,
+							   Mx32 * Vx2);
+					sum = gte_mac3_add(ctx, sum,
+							   Mx33 * Vx3);
+					MAC3 = (s32)(sum >> SHIFT_FRAC);
+
+					IR1 = gte_chk_ir1(ctx, MAC1, lm);
+					IR2 = gte_chk_ir2(ctx, MAC2, lm);
+					IR3 = gte_chk_ir3(ctx, MAC3, lm);
+				}
+				gte_flag_update(ctx);
+				break;
+			}
+
+			case NCDS:
+				FLAG = 0;
+
+				gte_ncd(ctx, VX0, VY0, VZ0);
 				break;
 
 			default:

@@ -543,4 +543,19 @@ ALWAYS_INLINE uint cpu_instr_shift_frac_get(const u32 instr)
 	return instr & CPU_INSTR_SF_FLAG ? 12 : 0;
 }
 
+ALWAYS_INLINE uint cpu_instr_mx_get(const u32 instr)
+{
+	return (instr >> 17) & 0x3;
+}
+
+ALWAYS_INLINE uint cpu_instr_vx_get(const u32 instr)
+{
+	return (instr >> 15) & 0x3;
+}
+
+ALWAYS_INLINE uint cpu_instr_tx_get(const u32 instr)
+{
+	return (instr >> 13) & 0x3;
+}
+
 extern const char *const exc_code_names[];
