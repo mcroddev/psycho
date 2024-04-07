@@ -58,6 +58,7 @@
 #define CT	(CPU_OP_CT)
 #define DIV	(CPU_OP_DIV)
 #define DIVU	(CPU_OP_DIVU)
+#define DCPL	(CPU_OP_DCPL)
 #define DPCS	(CPU_OP_DPCS)
 #define INTPL	(CPU_OP_INTPL)
 #define J	(CPU_OP_J)
@@ -1927,6 +1928,31 @@ void cpu_step(struct psycho_ctx *const ctx)
 				gte_flag_update(ctx);
 				break;
 			}
+
+			case DCPL:
+				FLAG = 0;
+
+				s64 sum = gte_mac1_add(
+					ctx, 0,
+					((RGBC & 0xFF) * (u32)IR1) << 4);
+				MAC1 = (s32)sum;
+
+				sum = gte_mac2_add(
+					ctx, 0,
+					(((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
+				MAC2 = (s32)sum;
+
+				sum = gte_mac3_add(
+					ctx, 0,
+					(((RGBC >> 16) & 0xFF) * (u32)IR3)
+						<< 4);
+				MAC3 = (s32)sum;
+
+				gte_intpl_color(ctx);
+				gte_rgb_push(ctx);
+				gte_flag_update(ctx);
+
+				break;
 
 			default:
 				EXC_RAISE(RI);
