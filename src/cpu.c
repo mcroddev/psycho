@@ -76,7 +76,6 @@
 #define MTLO	(CPU_OP_MTLO)
 #define MULT	(CPU_OP_MULT)
 #define MULTU	(CPU_OP_MULTU)
-#define NCLIP	(CPU_OP_NCLIP)
 #define NOR	(CPU_OP_NOR)
 #define OR	(CPU_OP_OR)
 #define ORI	(CPU_OP_ORI)
@@ -138,12 +137,6 @@
 #define VX0	((s16)(VXY0 & 0xFFFF))
 #define VY0	((s16)(VXY0 >> 16))
 #define VZ0	(ctx->cpu.cp2.cpr.VZ0)
-#define SX0	((s16)(SXY0 & 0xFFFF))
-#define SX1	((s16)(SXY1 & 0xFFFF))
-#define SX2	((s16)(SXY2 & 0xFFFF))
-#define SY0	((s16)(SXY0 >> 16))
-#define SY1	((s16)(SXY1 >> 16))
-#define SY2	((s16)(SXY2 >> 16))
 
 #define CP2_CCR	(ctx->cpu.cp2.ccr.regs)
 #define R11R12	(ctx->cpu.cp2.ccr.R11R12)
@@ -1083,17 +1076,6 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 				gte_rtp(ctx, VX0, VY0, VZ0);
 				break;
-
-			case NCLIP: {
-				FLAG = 0;
-
-				MAC0 = GTE_MAC0_ADD((s64)(SX0 * (SY1 - SY2)) +
-						    (SX1 * (SY2 - SY0)) +
-						    (SX2 * (SY0 - SY1)));
-
-				gte_flag_update(ctx);
-				break;
-			}
 
 			default:
 				EXC_RAISE(RI);
