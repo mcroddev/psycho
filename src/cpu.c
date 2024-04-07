@@ -1574,7 +1574,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 				if (tx == 2) {
 					sum = gte_mac1_add(ctx, 0,
-							   (s64)(u64)Tx1 << 12);
+							   (s64)((u64)Tx1 << 12));
 					sum = gte_mac1_add(ctx, sum,
 							   Mx11 * Vx1);
 					MAC1 = (s32)(sum >> SHIFT_FRAC);
@@ -1587,7 +1587,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 					IR1 = gte_chk_ir1(ctx, MAC1, lm);
 
 					sum = gte_mac2_add(ctx, 0,
-							   (s64)(u64)Tx2 << 12);
+							   (s64)((u64)Tx2 << 12));
 					sum = gte_mac2_add(ctx, sum,
 							   Mx21 * Vx1);
 					MAC2 = (s32)(sum >> SHIFT_FRAC);
@@ -1600,7 +1600,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 					IR2 = gte_chk_ir2(ctx, MAC2, lm);
 
 					sum = gte_mac3_add(ctx, 0,
-							   (s64)(u64)Tx3 << 12);
+							   (s64)((u64)Tx3 << 12));
 					sum = gte_mac3_add(ctx, sum,
 							   Mx31 * Vx1);
 					MAC3 = (s32)(sum >> SHIFT_FRAC);
@@ -1613,7 +1613,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 					IR3 = gte_chk_ir3(ctx, MAC3, lm);
 				} else {
 					sum = gte_mac1_add(ctx, 0,
-							   (s64)(u64)Tx1 << 12);
+							   (s64)((u64)Tx1 << 12));
 					sum = gte_mac1_add(ctx, sum,
 							   Mx11 * Vx1);
 					sum = gte_mac1_add(ctx, sum,
@@ -1623,7 +1623,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 					MAC1 = (s32)(sum >> SHIFT_FRAC);
 
 					sum = gte_mac2_add(ctx, 0,
-							   (s64)(u64)Tx2 << 12);
+							   (s64)((u64)Tx2 << 12));
 					sum = gte_mac2_add(ctx, sum,
 							   Mx21 * Vx1);
 					sum = gte_mac2_add(ctx, sum,
@@ -1633,7 +1633,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 					MAC2 = (s32)(sum >> SHIFT_FRAC);
 
 					sum = gte_mac3_add(ctx, 0,
-							   (s64)(u64)Tx3 << 12);
+							   (s64)((u64)Tx3 << 12));
 					sum = gte_mac3_add(ctx, sum,
 							   Mx31 * Vx1);
 					sum = gte_mac3_add(ctx, sum,
