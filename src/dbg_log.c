@@ -29,7 +29,7 @@
 #include "dbg_log.h"
 
 FORMAT_CHK(3, 4)
-void dbg_log_msg(const struct psycho_dbg_log *const log, const uint lvl,
+void dbg_log_msg(struct psycho_dbg_log *const log, const uint lvl,
 		 const char *const msg, ...)
 {
 	// clang-format off

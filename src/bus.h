@@ -24,40 +24,40 @@
 
 #pragma once
 
-#include "psycho/ctx.h"
+#include "psycho/bus.h"
 
 /// @brief Loads a word from the system bus.
-/// @param ctx The psycho_ctx instance.
+/// @param bus The psycho_bus instance.
 /// @param paddr The physical address to load the word from.
 /// @returns The word from the system bus.
-u32 bus_lw(const struct psycho_ctx *ctx, u32 paddr);
+u32 bus_lw(const struct psycho_bus *bus, u32 paddr);
 
 /// @brief Loads a half-word from the system bus.
-/// @param ctx The psycho_ctx instance.
+/// @param bus The psycho_bus instance.
 /// @param paddr The physical address to load the half-word from.
 /// @returns The half-word from the system bus.
-u16 bus_lh(const struct psycho_ctx *ctx, u32 paddr);
+u16 bus_lh(const struct psycho_bus *bus, u32 paddr);
 
 /// @brief Loads a byte from the system bus.
-/// @param ctx The psycho_ctx instance.
+/// @param bus The psycho_bus instance.
 /// @param paddr The physical address to load the byte from.
 /// @returns The byte from the system bus.
-u8 bus_lb(const struct psycho_ctx *ctx, u32 paddr);
+u8 bus_lb(const struct psycho_bus *bus, u32 paddr);
 
 /// @brief Stores a word to the system bus.
 /// @param ctx The psycho_ctx instance.
 /// @param paddr The physical address to store the word into.
 /// @param word The word to store.
-void bus_sw(struct psycho_ctx *ctx, u32 paddr, u32 word);
+void bus_sw(struct psycho_bus *bus, u32 paddr, u32 word);
 
 /// @brief Stores a half-word to the system bus.
 /// @param ctx The psycho_ctx instance.
 /// @param paddr The physical address to store the half-word into.
 /// @param hword The half-word to store.
-void bus_sh(struct psycho_ctx *ctx, u32 paddr, u16 hword);
+void bus_sh(struct psycho_bus *bus, u32 paddr, u16 hword);
 
 /// @brief Stores a byte to the system bus.
 /// @param ctx The psycho_ctx instance.
 /// @param paddr The physical address to store the byte into.
 /// @param byte The byte to store.
-void bus_sb(struct psycho_ctx *ctx, u32 paddr, u8 byte);
+void bus_sb(struct psycho_bus *bus, u32 paddr, u8 byte);

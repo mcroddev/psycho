@@ -66,13 +66,17 @@ static void ps_x_exe_inject(struct psycho_ctx *const ctx)
 	ctx->ps_x_exe = NULL;
 }
 
-NODISCARD struct psycho_ctx psycho_ctx_create(u8 *const ram)
+void psycho_ctx_init(struct psycho_ctx *const ctx, u8 *const ram)
 {
-	struct psycho_ctx ctx;
-	memset(&ctx, 0, sizeof(ctx));
+	ctx->bus.log = &ctx->log;
 
-	ctx.bus.ram = ram;
-	return ctx;
+	ctx->cpu.bus = &ctx->bus;
+	ctx->cpu.log = &ctx->log;
+
+	ctx->bus.ram = ram;
+
+	psycho_ctx_reset(ctx);
+	LOG_INFO(&ctx->log, "System initialized!");
 }
 
 void psycho_ctx_reset(struct psycho_ctx *const ctx)

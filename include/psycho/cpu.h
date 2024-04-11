@@ -24,6 +24,8 @@
 
 #pragma once
 
+#include "bus.h"
+#include "dbg_log.h"
 #include "cpu_defs.h"
 #include "types.h"
 

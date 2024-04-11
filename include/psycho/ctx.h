@@ -45,7 +45,7 @@ struct psycho_ctx {
 	const u8 *ps_x_exe;
 };
 
-struct psycho_ctx psycho_ctx_create(u8 *ram);
+void psycho_ctx_init(struct psycho_ctx *ctx, u8 *ram);
 
 void psycho_ctx_reset(struct psycho_ctx *ctx);
 void psycho_ctx_step(struct psycho_ctx *ctx);

@@ -1004,7 +1004,7 @@ static ALWAYS_INLINE NODISCARD u32 paddr_get(const struct psycho_ctx *const ctx)
 static ALWAYS_INLINE NODISCARD u32 instr_fetch(struct psycho_ctx *const ctx)
 {
 	const u32 paddr = cpu_vaddr_to_paddr(PC);
-	const u32 instr = bus_lw(ctx, paddr);
+	const u32 instr = bus_lw(&ctx->bus, paddr);
 
 	if (LDS_NEXT.dst) {
 		LOG_TRACE(&ctx->log,
@@ -2069,7 +2069,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 	case LB: {
 		const u32 paddr = paddr_get(ctx);
-		const s8 byte = (s8)bus_lb(ctx, paddr);
+		const s8 byte = (s8)bus_lb(&ctx->bus, paddr);
 
 		load_delay(ctx, rt, (u32)byte);
 		break;
@@ -2084,7 +2084,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 		}
 
 		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-		const s16 hword = (s16)bus_lh(ctx, paddr);
+		const s16 hword = (s16)bus_lh(&ctx->bus, paddr);
 
 		load_delay(ctx, rt, (u32)hword);
 		break;
@@ -2092,7 +2092,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 	case LWL: {
 		const u32 paddr = paddr_get(ctx);
-		const u32 data = bus_lw(ctx, paddr & (u32)~3);
+		const u32 data = bus_lw(&ctx->bus, paddr & (u32)~3);
 
 		u32 word = (LDS_NEXT.dst == rt) ? LDS_NEXT.val : GPR[rt];
 
@@ -2114,7 +2114,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 		}
 
 		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-		const u32 word = bus_lw(ctx, paddr);
+		const u32 word = bus_lw(&ctx->bus, paddr);
 
 		load_delay(ctx, rt, word);
 		break;
@@ -2122,7 +2122,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 	case LBU: {
 		const u32 paddr = paddr_get(ctx);
-		const u8 byte = bus_lb(ctx, paddr);
+		const u8 byte = bus_lb(&ctx->bus, paddr);
 
 		load_delay(ctx, rt, byte);
 		break;
@@ -2137,7 +2137,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 		}
 
 		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-		const u16 hword = bus_lh(ctx, paddr);
+		const u16 hword = bus_lh(&ctx->bus, paddr);
 
 		load_delay(ctx, rt, hword);
 		break;
@@ -2145,7 +2145,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 	case LWR: {
 		const u32 paddr = paddr_get(ctx);
-		const u32 data = bus_lw(ctx, paddr & (u32)~3);
+		const u32 data = bus_lw(&ctx->bus, paddr & (u32)~3);
 
 		u32 word = LDS_NEXT.dst == rt ? LDS_NEXT.val : GPR[rt];
 
@@ -2161,7 +2161,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 	case SB: {
 		const u32 paddr = paddr_get(ctx);
 
-		bus_sb(ctx, paddr, (u8)GPR[rt]);
+		bus_sb(&ctx->bus, paddr, (u8)GPR[rt]);
 		break;
 	}
 
@@ -2175,7 +2175,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
 
-		bus_sh(ctx, paddr, (u16)GPR[rt]);
+		bus_sh(&ctx->bus, paddr, (u16)GPR[rt]);
 		break;
 	}
 
@@ -2183,14 +2183,14 @@ void cpu_step(struct psycho_ctx *const ctx)
 		const u32 paddr = paddr_get(ctx);
 		const u32 aligned_paddr = paddr & (u32)~3;
 
-		u32 word = bus_lw(ctx, aligned_paddr);
+		u32 word = bus_lw(&ctx->bus, aligned_paddr);
 
 		const uint shift = (paddr & 3) * 8;
 		const uint mask = 0xFFFFFF00 << shift;
 
 		word = (word & mask) | (GPR[rt] >> (24 - shift));
 
-		bus_sw(ctx, aligned_paddr, word);
+		bus_sw(&ctx->bus, aligned_paddr, word);
 		break;
 	}
 
@@ -2208,7 +2208,7 @@ void cpu_step(struct psycho_ctx *const ctx)
 
 		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
 
-		bus_sw(ctx, paddr, GPR[rt]);
+		bus_sw(&ctx->bus, paddr, GPR[rt]);
 		break;
 	}
 
@@ -2216,14 +2216,14 @@ void cpu_step(struct psycho_ctx *const ctx)
 		const u32 paddr = paddr_get(ctx);
 		const u32 aligned_paddr = paddr & (u32)~3;
 
-		u32 word = bus_lw(ctx, aligned_paddr);
+		u32 word = bus_lw(&ctx->bus, aligned_paddr);
 
 		const uint shift = (paddr & 3) * 8;
 		const uint mask = 0x00FFFFFF >> (24 - shift);
 
 		word = (word & mask) | (GPR[rt] << shift);
 
-		bus_sw(ctx, aligned_paddr, word);
+		bus_sw(&ctx->bus, aligned_paddr, word);
 		break;
 	}
 

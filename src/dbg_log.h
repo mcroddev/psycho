@@ -24,8 +24,7 @@
 
 #include "psycho/dbg_log.h"
 
-void dbg_log_msg(const struct psycho_dbg_log *log, uint level, const char *msg,
-		 ...);
+void dbg_log_msg(struct psycho_dbg_log *log, uint level, const char *msg, ...);
 
 #define LOG_HANDLE(logger, lvl, args...)                \
 	({                                              \

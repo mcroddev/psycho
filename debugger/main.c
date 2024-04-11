@@ -153,8 +153,7 @@ static void exe_file_open(struct psycho_ctx *const ctx, const char *const file)
 
 int main(int argc, char **argv)
 {
-	static u8 ram[PSYCHO_BUS_RAM_SIZE];
-	memset(ram, 0, sizeof(ram));
+	static u8 ram[PSYCHO_BUS_RAM_SIZE] = {};
 
 	memset(exe, 0, sizeof(exe));
 
@@ -165,9 +164,10 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	struct psycho_ctx ctx = psycho_ctx_create(ram);
-
+	struct psycho_ctx ctx = {};
 	ctx_config(&ctx);
+	psycho_ctx_init(&ctx, ram);
+
 	bios_file_open(&ctx, argv[1]);
 	exe_file_open(&ctx, argv[2]);
 
