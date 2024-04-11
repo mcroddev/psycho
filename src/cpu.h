@@ -22,8 +22,8 @@
 
 #pragma once
 
-#include "psycho/ctx.h"
+#include "psycho/cpu.h"
 
-void cpu_reset(struct psycho_ctx *ctx);
+void cpu_reset(struct psycho_cpu *cpu);
 
-void cpu_step(struct psycho_ctx *ctx);
+void cpu_step(struct psycho_cpu *cpu);

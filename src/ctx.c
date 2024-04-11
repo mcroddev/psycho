@@ -81,13 +81,13 @@ void psycho_ctx_init(struct psycho_ctx *const ctx, u8 *const ram)
 
 void psycho_ctx_reset(struct psycho_ctx *const ctx)
 {
-	cpu_reset(ctx);
+	cpu_reset(&ctx->cpu);
 	LOG_INFO(&ctx->log, "System reset!");
 }
 
 void psycho_ctx_step(struct psycho_ctx *const ctx)
 {
-	cpu_step(ctx);
+	cpu_step(&ctx->cpu);
 
 	if ((ctx->ps_x_exe) && ctx->cpu.pc == PS_X_EXE_INJECT_ADDR) {
 		ps_x_exe_inject(ctx);

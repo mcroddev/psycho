@@ -40,7 +40,7 @@ void dbg_log_msg(struct psycho_dbg_log *log, uint level, const char *msg, ...);
 (LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_INFO, args))
 
 #define LOG_WARN(logger, args...) \
-(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_WARN, args))
+//(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_WARN, args))
 
 #define LOG_ERR(logger, args...) \
 (LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_ERR, args))
