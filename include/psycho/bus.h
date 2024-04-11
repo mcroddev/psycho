@@ -45,6 +45,7 @@
 struct psycho_bus {
 	u8 bios[PSYCHO_BUS_BIOS_SIZE];
 	u8 spad[PSYCHO_BUS_SPAD_SIZE];
+	struct psycho_dbg_log *log;
 	u8 *ram;
 };
 #pragma GCC diagnostic pop

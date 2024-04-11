@@ -37,7 +37,8 @@ static void ps_x_exe_inject(struct psycho_ctx *const ctx)
 	u32 dest = ps_x_exe_dest_get(ctx->ps_x_exe);
 	const u32 size = ps_x_exe_size_get(ctx->ps_x_exe);
 
-	LOG_INFO("Injecting PS-X EXE at 0x%08X (len=%d bytes)", dest, size);
+	LOG_INFO(&ctx->log, "Injecting PS-X EXE at 0x%08X (len=%d bytes)", dest,
+		 size);
 
 	const uint eof = PS_X_EXE_OFFSET_DATA + size;
 
@@ -77,7 +78,7 @@ NODISCARD struct psycho_ctx psycho_ctx_create(u8 *const ram)
 void psycho_ctx_reset(struct psycho_ctx *const ctx)
 {
 	cpu_reset(ctx);
-	LOG_INFO("System reset!");
+	LOG_INFO(&ctx->log, "System reset!");
 }
 
 void psycho_ctx_step(struct psycho_ctx *const ctx)
@@ -103,6 +104,6 @@ NODISCARD bool psycho_ctx_ps_x_exe_run(struct psycho_ctx *const ctx,
 	psycho_ctx_reset(ctx);
 	ctx->ps_x_exe = data;
 
-	LOG_INFO("PS-X EXE will be injected!");
+	LOG_INFO(&ctx->log, "PS-X EXE will be injected!");
 	return true;
 }

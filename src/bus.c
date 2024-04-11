@@ -57,13 +57,14 @@ u32 bus_lw(const struct psycho_ctx *const ctx, const u32 paddr)
 		break;
 
 	default:
-		LOG_WARN("Unknown physical address 0x%08X when attempting to "
+		LOG_WARN(&ctx->log,
+			 "Unknown physical address 0x%08X when attempting to "
 			 "load word; returning 0xFFFF'FFFF",
 			 paddr);
 		return word;
 	}
 
-	LOG_TRACE("Loaded word 0x%08X from 0x%08X", word, paddr);
+	LOG_TRACE(&ctx->log, "Loaded word 0x%08X from 0x%08X", word, paddr);
 	return word;
 }
 
@@ -81,12 +82,14 @@ u16 bus_lh(const struct psycho_ctx *ctx, const u32 paddr)
 		break;
 
 	default:
-		LOG_WARN("Unknown physical address 0x%08X when attempting to "
+		LOG_WARN(&ctx->log,
+			 "Unknown physical address 0x%08X when attempting to "
 			 "load half-word; returning 0xFFFF",
 			 paddr);
 		return hword;
 	}
-	LOG_TRACE("Loaded half-word 0x%04X from 0x%08X", hword, paddr);
+	LOG_TRACE(&ctx->log, "Loaded half-word 0x%04X from 0x%08X", hword,
+		  paddr);
 	return hword;
 }
 
@@ -108,13 +111,14 @@ u8 bus_lb(const struct psycho_ctx *const ctx, const u32 paddr)
 		break;
 
 	default:
-		LOG_WARN("Unknown physical address 0x%08X when attempting to "
+		LOG_WARN(&ctx->log,
+			 "Unknown physical address 0x%08X when attempting to "
 			 "load byte; returning 0xFF",
 			 paddr);
 		return byte;
 	}
 
-	LOG_TRACE("Loaded byte 0x%02X from 0x%08X", byte, paddr);
+	LOG_TRACE(&ctx->log, "Loaded byte 0x%02X from 0x%08X", byte, paddr);
 	return byte;
 }
 
@@ -130,12 +134,13 @@ void bus_sw(struct psycho_ctx *const ctx, const u32 paddr, const u32 word)
 		break;
 
 	default:
-		LOG_WARN("Unknown physical address 0x%08X when attempting to "
+		LOG_WARN(&ctx->log,
+			 "Unknown physical address 0x%08X when attempting to "
 			 "store word 0x%08X; ignoring",
 			 paddr, word);
 		return;
 	}
-	LOG_TRACE("Stored word 0x%08X at 0x%08X", word, paddr);
+	LOG_TRACE(&ctx->log, "Stored word 0x%08X at 0x%08X", word, paddr);
 }
 
 void bus_sh(struct psycho_ctx *const ctx, const u32 paddr, const u16 hword)
@@ -150,12 +155,13 @@ void bus_sh(struct psycho_ctx *const ctx, const u32 paddr, const u16 hword)
 		break;
 
 	default:
-		LOG_WARN("Unknown physical address 0x%08X when attempting to "
+		LOG_WARN(&ctx->log,
+			 "Unknown physical address 0x%08X when attempting to "
 			 "store half-word 0x%04X; ignoring",
 			 paddr, hword);
 		return;
 	}
-	LOG_TRACE("Stored half-word 0x%04X at 0x%08X", hword, paddr);
+	LOG_TRACE(&ctx->log, "Stored half-word 0x%04X at 0x%08X", hword, paddr);
 }
 
 void bus_sb(struct psycho_ctx *const ctx, const u32 paddr, const u8 byte)
@@ -170,10 +176,11 @@ void bus_sb(struct psycho_ctx *const ctx, const u32 paddr, const u8 byte)
 		break;
 
 	default:
-		LOG_WARN("Unknown physical address 0x%08X when attempting to "
+		LOG_WARN(&ctx->log,
+			 "Unknown physical address 0x%08X when attempting to "
 			 "store byte 0x%02X; ignoring",
 			 paddr, byte);
 		break;
 	}
-	LOG_TRACE("Stored byte 0x%02X at 0x%08X", byte, paddr);
+	LOG_TRACE(&ctx->log, "Stored byte 0x%02X at 0x%08X", byte, paddr);
 }

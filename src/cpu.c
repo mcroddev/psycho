@@ -913,10 +913,11 @@ static ALWAYS_INLINE void load_delay(struct psycho_ctx *const ctx,
 	LDS_PEND.dst = dst;
 	LDS_PEND.val = val;
 
-	LOG_TRACE("Load delay now pending (dst=%d, val=0x%08X)", dst, val);
+	LOG_TRACE(&ctx->log, "Load delay now pending (dst=%d, val=0x%08X)", dst,
+		  val);
 
 	if (LDS_NEXT.dst == dst) {
-		LOG_TRACE("Evicting next load delay slot");
+		LOG_TRACE(&ctx->log, "Evicting next load delay slot");
 		memset(&LDS_NEXT, 0, sizeof(LDS_NEXT));
 	}
 }
@@ -941,11 +942,11 @@ static void exc_raise(struct psycho_ctx *const ctx, const uint exc_code)
 	const char *const exc_name = exc_code_names[exc_code];
 
 	if (ctx->cpu.exc_halt & (1 << exc_code)) {
-		LOG_ERR("%s exception raised!", exc_name);
+		LOG_ERR(&ctx->log, "%s exception raised!", exc_name);
 		return;
 	}
 
-	LOG_WARN("%s exception raised!", exc_name);
+	LOG_WARN(&ctx->log, "%s exception raised!", exc_name);
 
 	// So, on an exception, the CPU:
 
@@ -1006,7 +1007,8 @@ static ALWAYS_INLINE NODISCARD u32 instr_fetch(struct psycho_ctx *const ctx)
 	const u32 instr = bus_lw(ctx, paddr);
 
 	if (LDS_NEXT.dst) {
-		LOG_TRACE("Flushing load delay slot (dest=%d, value=0x%08X)",
+		LOG_TRACE(&ctx->log,
+			  "Flushing load delay slot (dest=%d, value=0x%08X)",
 			  LDS_NEXT.dst, LDS_NEXT.val);
 
 		GPR[LDS_NEXT.dst] = LDS_NEXT.val;
@@ -1034,7 +1036,7 @@ void cpu_reset(struct psycho_ctx *const ctx)
 	memset(&LDS_NEXT, 0, sizeof(LDS_NEXT));
 	memset(&LDS_PEND, 0, sizeof(LDS_PEND));
 
-	LOG_INFO("CPU reset!");
+	LOG_INFO(&ctx->log, "CPU reset!");
 }
 
 /// @brief Executes the current instruction.
@@ -2024,19 +2026,22 @@ void cpu_step(struct psycho_ctx *const ctx)
 				s64 sum = 0;
 				sum = gte_mac1_add(ctx, sum, IR1 * IR0);
 				sum = gte_mac1_add(ctx, sum,
-						   (s64)((u64)MAC1 << SHIFT_FRAC));
+						   (s64)((u64)MAC1
+							 << SHIFT_FRAC));
 				MAC1 = (s32)(sum >> SHIFT_FRAC);
 
 				sum = 0;
 				sum = gte_mac2_add(ctx, sum, IR2 * IR0);
 				sum = gte_mac2_add(ctx, sum,
-						   (s64)((u64)MAC2 << SHIFT_FRAC));
+						   (s64)((u64)MAC2
+							 << SHIFT_FRAC));
 				MAC2 = (s32)(sum >> SHIFT_FRAC);
 
 				sum = 0;
 				sum = gte_mac3_add(ctx, sum, IR3 * IR0);
 				sum = gte_mac3_add(ctx, sum,
-						   (s64)((u64)MAC3 << SHIFT_FRAC));
+						   (s64)((u64)MAC3
+							 << SHIFT_FRAC));
 				MAC3 = (s32)(sum >> SHIFT_FRAC);
 
 				gte_rgb_push(ctx);

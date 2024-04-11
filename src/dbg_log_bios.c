@@ -376,7 +376,7 @@ static ALWAYS_INLINE void tty_intercept_handle(struct psycho_ctx *const ctx)
 	const char c = (char)ctx->cpu.gpr[CPU_GPR_a0];
 
 	if (c == '\n') {
-		LOG_DBG("TTY: %s", ctx->log_bios.tty_buf);
+		LOG_DBG(&ctx->log, "TTY: %s", ctx->log_bios.tty_buf);
 
 		memset(ctx->log_bios.tty_buf, 0, sizeof(ctx->log_bios.tty_buf));
 		ctx->log_bios.tty_buf_len = 0;
@@ -388,7 +388,7 @@ static ALWAYS_INLINE void tty_intercept_handle(struct psycho_ctx *const ctx)
 void dbg_log_bios_chk(struct psycho_ctx *const ctx)
 {
 	if ((ctx->log_bios.waiting) && ctx->cpu.instr == JR_RA) {
-		LOG_DBG("BIOS call: %s -> 0x%08X", ctx->log_bios.str,
+		LOG_DBG(&ctx->log, "BIOS call: %s -> 0x%08X", ctx->log_bios.str,
 			ctx->cpu.gpr[CPU_GPR_v0]);
 
 		state_reset(ctx);
@@ -417,7 +417,7 @@ void dbg_log_bios_chk(struct psycho_ctx *const ctx)
 
 	if (!fn->format_args) {
 		if (fn->retval_type == RETVAL_TYPE_NONE) {
-			LOG_DBG("BIOS call: %s", fn->prototype);
+			LOG_DBG(&ctx->log, "BIOS call: %s", fn->prototype);
 		} else {
 			memcpy(ctx->log_bios.str, fn->prototype,
 			       fn->prototype_len);
@@ -433,7 +433,7 @@ void dbg_log_bios_chk(struct psycho_ctx *const ctx)
 		stracef(ctx, fn);
 
 		if (fn->retval_type == RETVAL_TYPE_NONE) {
-			LOG_DBG("BIOS call: %s", ctx->log_bios.str);
+			LOG_DBG(&ctx->log, "BIOS call: %s", ctx->log_bios.str);
 		} else {
 			ctx->log_bios.waiting = true;
 		}

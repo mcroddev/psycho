@@ -27,20 +27,32 @@
 void dbg_log_msg(const struct psycho_dbg_log *log, uint level, const char *msg,
 		 ...);
 
-#define LOG_HANDLE(lvl, args...)                              \
-	({                                                    \
-		if ((ctx->log.level >= lvl) && ctx->log.cb) { \
-			dbg_log_msg(&ctx->log, lvl, args);    \
-		}                                             \
+#define LOG_HANDLE(logger, lvl, args...)                \
+	({                                              \
+		struct psycho_dbg_log *log = (logger);  \
+		if ((log->level >= (lvl)) && log->cb) { \
+			dbg_log_msg(log, (lvl), args);  \
+		}                                       \
 	})
 
 // clang-format off
 
-#define LOG_INFO(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_INFO, args))
-#define LOG_WARN(args...)	//(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_WARN, args))
-#define LOG_ERR(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_ERR, args))
-#define LOG_FATAL(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_FATAL, args))
-#define LOG_DBG(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_DBG, args))
-#define LOG_TRACE(args...)	(LOG_HANDLE(PSYCHO_DBG_LOG_LEVEL_TRACE, args))
+#define LOG_INFO(logger, args...) \
+(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_INFO, args))
+
+#define LOG_WARN(logger, args...) \
+(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_WARN, args))
+
+#define LOG_ERR(logger, args...) \
+(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_ERR, args))
+
+#define LOG_FATAL(logger, args...) \
+(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_FATAL, args))
+
+#define LOG_DBG(logger, args...) \
+(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_DBG, args))
+
+#define LOG_TRACE(logger, args...) \
+(LOG_HANDLE((logger), PSYCHO_DBG_LOG_LEVEL_TRACE, args))
 
 // clang-format on

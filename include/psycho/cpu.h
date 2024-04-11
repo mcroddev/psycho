@@ -145,5 +145,8 @@ struct psycho_cpu {
 	u32 lo;
 
 	u16 exc_halt;
+
+	struct psycho_bus *bus;
+	struct psycho_dbg_log *log;
 };
 #pragma GCC diagnostic pop
