@@ -34,6 +34,9 @@
 #define PSYCHO_CPU_EXC_CODE_RI		(0xA)
 #define PSYCHO_CPU_EXC_CODE_Ovf		(0xC)
 
+#define PSYCHO_CPU_GTE_NUM_VECS (3)
+#define PSYCHO_CPU_GTE_NUM_VEC_COMPONENTS (3)
+
 extern const char *const psycho_cpu_gpr_names[PSYCHO_CPU_GPR_REGS_NUM];
 extern const char *const psycho_cpu_cp0_cpr_names[PSYCHO_CPU_CP0_CPR_REGS_NUM];
 extern const char *const psycho_cpu_cp2_cpr_names[PSYCHO_CPU_CP2_CPR_REGS_NUM];
