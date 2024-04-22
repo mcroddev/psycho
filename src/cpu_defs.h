@@ -33,7 +33,9 @@
 #define CPU_OP_GROUP_SPECIAL	(0x00)
 #define CPU_OP_GROUP_BCOND	(0x01)
 #define CPU_OP_GROUP_COP0	(0x10)
+#define CPU_OP_GROUP_COP1	(0x11)
 #define CPU_OP_GROUP_COP2	(0x12)
+#define CPU_OP_GROUP_COP3	(0x13)
 
 /// @brief Add contents of registers `rs` and `rt` and place 32-bit result in
 /// register `rd`. Trap on two's complement overflow.

@@ -38,7 +38,9 @@
 
 #define GROUP_BCOND	(CPU_OP_GROUP_BCOND)
 #define GROUP_COP0	(CPU_OP_GROUP_COP0)
+#define GROUP_COP1	(CPU_OP_GROUP_COP1)
 #define GROUP_COP2	(CPU_OP_GROUP_COP2)
+#define GROUP_COP3	(CPU_OP_GROUP_COP3)
 #define GROUP_SPECIAL	(CPU_OP_GROUP_SPECIAL)
 
 #define ADD	(CPU_OP_ADD)
@@ -76,6 +78,7 @@
 #define LHU	(CPU_OP_LHU)
 #define LUI	(CPU_OP_LUI)
 #define LW	(CPU_OP_LW)
+#define LWC2	(CPU_OP_LWC2)
 #define LWL	(CPU_OP_LWL)
 #define LWR	(CPU_OP_LWR)
 #define MF	(CPU_OP_MF)
@@ -117,6 +120,7 @@
 #define SUB	(CPU_OP_SUB)
 #define SUBU	(CPU_OP_SUBU)
 #define SW	(CPU_OP_SW)
+#define SWC2	(CPU_OP_SWC2)
 #define SWL	(CPU_OP_SWL)
 #define SWR	(CPU_OP_SWR)
 #define SYSCALL	(CPU_OP_SYSCALL)
@@ -272,584 +276,6 @@ static ALWAYS_INLINE void gte_flag_update(struct psycho_cpu *const cpu)
 	}
 }
 
-static ALWAYS_INLINE void gte_ovf_chk(struct psycho_cpu *const cpu,
-				      const s64 sum, const s64 min,
-				      const s64 max, const uint neg_flag,
-				      const uint pos_flag)
-{
-	if (sum > max) {
-		FLAG |= pos_flag;
-	} else if (sum < min) {
-		FLAG |= neg_flag;
-	}
-}
-
-static ALWAYS_INLINE NODISCARD s64 gte_mac0_add(struct psycho_cpu *const cpu,
-						const s64 sum)
-{
-	gte_ovf_chk(cpu, sum, CPU_CP2_CPR_MAC0_MIN, CPU_CP2_CPR_MAC0_MAX,
-		    CPU_CP2_CCR_FLAG_MAC0_NEG_OVF,
-		    CPU_CP2_CCR_FLAG_MAC0_POS_OVF);
-	return sum;
-}
-
-static ALWAYS_INLINE NODISCARD s64 gte_mac123_add(struct psycho_cpu *const cpu,
-						  const s64 mac,
-						  const s64 addend,
-						  const uint neg_flag,
-						  const uint pos_flag)
-{
-	const s64 sum = mac + addend;
-
-	gte_ovf_chk(cpu, sum, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
-		    neg_flag, pos_flag);
-
-	// Sign-extend result to 44 bits (64-20 = 44).
-	return (s64)((u64)sum << 20) >> 20;
-}
-
-static NODISCARD s64 gte_mac1_add(struct psycho_cpu *const cpu, const s64 mac,
-				  const s64 addend)
-{
-	return gte_mac123_add(cpu, mac, addend, CPU_CP2_CCR_FLAG_MAC1_NEG_OVF,
-			      CPU_CP2_CCR_FLAG_MAC1_POS_OVF);
-}
-
-static NODISCARD s64 gte_mac2_add(struct psycho_cpu *const cpu, const s64 mac,
-				  const s64 addend)
-{
-	return gte_mac123_add(cpu, mac, addend, CPU_CP2_CCR_FLAG_MAC2_NEG_OVF,
-			      CPU_CP2_CCR_FLAG_MAC2_POS_OVF);
-}
-
-static NODISCARD s64 gte_mac3_add(struct psycho_cpu *const cpu, const s64 mac,
-				  const s64 addend)
-{
-	return gte_mac123_add(cpu, mac, addend, CPU_CP2_CCR_FLAG_MAC3_NEG_OVF,
-			      CPU_CP2_CCR_FLAG_MAC3_POS_OVF);
-}
-
-static ALWAYS_INLINE u16 gte_chk_sz3_otz(struct psycho_cpu *const cpu,
-					 const s32 value)
-{
-	if (value < CPU_CP2_CPR_SZ3_OTZ_MIN) {
-		FLAG |= CPU_CP2_CCR_FLAG_SZ3_OR_OTZ_SATURATED;
-		return CPU_CP2_CPR_SZ3_OTZ_MIN;
-	}
-
-	if (value > CPU_CP2_CPR_SZ3_OTZ_MAX) {
-		FLAG |= CPU_CP2_CCR_FLAG_SZ3_OR_OTZ_SATURATED;
-		return CPU_CP2_CPR_SZ3_OTZ_MAX;
-	}
-	return (u16)value;
-}
-
-static ALWAYS_INLINE void gte_sz_push(struct psycho_cpu *const cpu,
-				      const s64 sum)
-{
-	SZ0 = SZ1;
-	SZ1 = SZ2;
-	SZ2 = SZ3;
-	SZ3 = gte_chk_sz3_otz(cpu, (s32)(sum >> 12));
-}
-
-static ALWAYS_INLINE void gte_sxy_push(struct psycho_cpu *const cpu,
-				       const s16 x, const s16 y)
-{
-	SXY0 = SXY1;
-	SXY1 = SXY2;
-	SXY2 = (s32)(((u32)x & 0xFFFF) | ((u32)y << 16));
-}
-
-static ALWAYS_INLINE s16 gte_chk_ir(struct psycho_cpu *const cpu,
-				    const s64 value, const uint flag,
-				    const bool lm)
-{
-	const s16 min = lm ? CPU_CP2_CPR_IR123_LM_MIN : CPU_CP2_CPR_IR123_MIN;
-
-	if (value < min) {
-		FLAG |= flag;
-		return min;
-	}
-
-	if (value > CPU_CP2_CPR_IR123_MAX) {
-		FLAG |= flag;
-		return CPU_CP2_CPR_IR123_MAX;
-	}
-	return (s16)value;
-}
-
-static ALWAYS_INLINE s16 gte_chk_ir0(struct psycho_cpu *const cpu,
-				     const s32 value)
-{
-	if (value < CPU_CP2_CPR_IR0_MIN) {
-		FLAG |= CPU_CP2_CCR_FLAG_IR0_SATURATED;
-		return CPU_CP2_CPR_IR0_MIN;
-	}
-
-	if (value > CPU_CP2_CPR_IR0_MAX) {
-		FLAG |= CPU_CP2_CCR_FLAG_IR0_SATURATED;
-		return CPU_CP2_CPR_IR0_MAX;
-	}
-	return (s16)value;
-}
-
-static ALWAYS_INLINE s16 gte_chk_ir1(struct psycho_cpu *const cpu,
-				     const s64 value, const bool lm)
-{
-	return gte_chk_ir(cpu, value, CPU_CP2_CCR_FLAG_IR1_SATURATED, lm);
-}
-
-static ALWAYS_INLINE s16 gte_chk_ir2(struct psycho_cpu *const cpu,
-				     const s64 value, const bool lm)
-{
-	return gte_chk_ir(cpu, value, CPU_CP2_CCR_FLAG_IR2_SATURATED, lm);
-}
-
-static ALWAYS_INLINE s16 gte_chk_ir3(struct psycho_cpu *const cpu,
-				     const s64 value, const bool lm)
-{
-	return gte_chk_ir(cpu, value, CPU_CP2_CCR_FLAG_IR3_SATURATED, lm);
-}
-
-static ALWAYS_INLINE s16 gte_chk_sxy(struct psycho_cpu *const cpu,
-				     const s32 value, const uint flag)
-{
-	if (value < CPU_CP2_CPR_SXY2_MIN) {
-		FLAG |= flag;
-		return CPU_CP2_CPR_SXY2_MIN;
-	}
-
-	if (value > CPU_CP2_CPR_SXY2_MAX) {
-		FLAG |= flag;
-		return CPU_CP2_CPR_SXY2_MAX;
-	}
-	return (s16)value;
-}
-
-static ALWAYS_INLINE s16 gte_chk_sx2(struct psycho_cpu *const cpu,
-				     const s32 value)
-{
-	return gte_chk_sxy(cpu, value, CPU_CP2_CCR_FLAG_SX2_SATURATED);
-}
-
-static ALWAYS_INLINE s16 gte_chk_sy2(struct psycho_cpu *const cpu,
-				     const s32 value)
-{
-	return gte_chk_sxy(cpu, value, CPU_CP2_CCR_FLAG_SY2_SATURATED);
-}
-
-static ALWAYS_INLINE u32 gte_chk_rgb(struct psycho_cpu *const cpu,
-				     const s32 value, const uint flag)
-{
-	if (value < CPU_CP2_CPR_RGB_MIN) {
-		FLAG |= flag;
-		return CPU_CP2_CPR_RGB_MIN;
-	}
-
-	if (value > CPU_CP2_CPR_RGB_MAX) {
-		FLAG |= flag;
-		return CPU_CP2_CPR_RGB_MAX;
-	}
-	return (u32)(u8)value;
-}
-
-static ALWAYS_INLINE u32 gte_chk_rgb_r(struct psycho_cpu *const cpu,
-				       const s32 value)
-{
-	return gte_chk_rgb(cpu, value, CPU_CP2_CCR_FLAG_RGB_R_SATURATED);
-}
-
-static ALWAYS_INLINE u32 gte_chk_rgb_g(struct psycho_cpu *const cpu,
-				       const s32 value)
-{
-	return gte_chk_rgb(cpu, value, CPU_CP2_CCR_FLAG_RGB_G_SATURATED);
-}
-
-static ALWAYS_INLINE u32 gte_chk_rgb_b(struct psycho_cpu *const cpu,
-				       const s32 value)
-{
-	return gte_chk_rgb(cpu, value, CPU_CP2_CCR_FLAG_RGB_B_SATURATED);
-}
-
-static ALWAYS_INLINE void gte_rgb_push(struct psycho_cpu *const cpu)
-{
-	const u32 b = gte_chk_rgb_b(cpu, MAC3 >> 4) << 16;
-	const u32 g = gte_chk_rgb_g(cpu, MAC2 >> 4) << 8;
-	const u32 r = gte_chk_rgb_r(cpu, MAC1 >> 4);
-
-	RGB0 = RGB1;
-	RGB1 = RGB2;
-	RGB2 = ((RGBC >> 24) << 24) | b | g | r;
-
-	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
-
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, MAC3, lm);
-}
-
-static void gte_intpl_color(struct psycho_cpu *const cpu)
-{
-	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(cpu->instr);
-
-	s64 x = (s64)(((u64)RFC << 12) - (u64)MAC1);
-	s64 y = (s64)(((u64)GFC << 12) - (u64)MAC2);
-	s64 z = (s64)(((u64)BFC << 12) - (u64)MAC3);
-
-	(void)gte_mac1_add(cpu, 0, x);
-	(void)gte_mac2_add(cpu, 0, y);
-	(void)gte_mac3_add(cpu, 0, z);
-
-	IR1 = gte_chk_ir1(cpu, (s32)(x >> SHIFT_FRAC), false);
-	IR2 = gte_chk_ir2(cpu, (s32)(y >> SHIFT_FRAC), false);
-	IR3 = gte_chk_ir3(cpu, (s32)(z >> SHIFT_FRAC), false);
-
-	s64 sum = gte_mac1_add(cpu, 0, (IR1 * IR0) + MAC1);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = gte_mac2_add(cpu, 0, (IR2 * IR0) + MAC2);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = gte_mac3_add(cpu, 0, (IR3 * IR0) + MAC3);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-}
-
-static void gte_dpc(struct psycho_cpu *const cpu, const u32 rgb)
-{
-	MAC1 = (s32)((rgb & 0xFF) << 16);
-	MAC2 = (s32)(((rgb >> 8) & 0xFF) << 16);
-	MAC3 = (s32)(((rgb >> 16) & 0xFF) << 16);
-
-	gte_intpl_color(cpu);
-	gte_rgb_push(cpu);
-	gte_flag_update(cpu);
-}
-
-static void gte_nc(struct psycho_cpu *const cpu, const s16 x, const s16 y,
-		   const s16 z)
-{
-	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(cpu->instr);
-
-	s64 sum = 0;
-	sum = gte_mac1_add(cpu, sum, L11 * x);
-	sum = gte_mac1_add(cpu, sum, L12 * y);
-	sum = gte_mac1_add(cpu, sum, L13 * z);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, L21 * x);
-	sum = gte_mac2_add(cpu, sum, L22 * y);
-	sum = gte_mac2_add(cpu, sum, L23 * z);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, L31 * x);
-	sum = gte_mac3_add(cpu, sum, L32 * y);
-	sum = gte_mac3_add(cpu, sum, L33 * z);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
-
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-	sum = 0;
-	sum = gte_mac1_add(cpu, sum, (s64)((u64)RBK << 12));
-	sum = gte_mac1_add(cpu, sum, LR1 * IR1);
-	sum = gte_mac1_add(cpu, sum, LR2 * IR2);
-	sum = gte_mac1_add(cpu, sum, LR3 * IR3);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, (s64)((u64)GBK << 12));
-	sum = gte_mac2_add(cpu, sum, LG1 * IR1);
-	sum = gte_mac2_add(cpu, sum, LG2 * IR2);
-	sum = gte_mac2_add(cpu, sum, LG3 * IR3);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, (s64)((u64)BBK << 12));
-	sum = gte_mac3_add(cpu, sum, LB1 * IR1);
-	sum = gte_mac3_add(cpu, sum, LB2 * IR2);
-	sum = gte_mac3_add(cpu, sum, LB3 * IR3);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-	gte_rgb_push(cpu);
-	gte_flag_update(cpu);
-}
-
-static void gte_ncd(struct psycho_cpu *const cpu, const s16 x, const s16 y,
-		    const s16 z)
-{
-	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(cpu->instr);
-
-	s64 sum = 0;
-	sum = gte_mac1_add(cpu, sum, L11 * x);
-	sum = gte_mac1_add(cpu, sum, L12 * y);
-	sum = gte_mac1_add(cpu, sum, L13 * z);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, L21 * x);
-	sum = gte_mac2_add(cpu, sum, L22 * y);
-	sum = gte_mac2_add(cpu, sum, L23 * z);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, L31 * x);
-	sum = gte_mac3_add(cpu, sum, L32 * y);
-	sum = gte_mac3_add(cpu, sum, L33 * z);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
-
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-	sum = 0;
-	sum = gte_mac1_add(cpu, sum, (s64)((u64)RBK << 12));
-	sum = gte_mac1_add(cpu, sum, LR1 * IR1);
-	sum = gte_mac1_add(cpu, sum, LR2 * IR2);
-	sum = gte_mac1_add(cpu, sum, LR3 * IR3);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, (s64)((u64)GBK << 12));
-	sum = gte_mac2_add(cpu, sum, LG1 * IR1);
-	sum = gte_mac2_add(cpu, sum, LG2 * IR2);
-	sum = gte_mac2_add(cpu, sum, LG3 * IR3);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, (s64)((u64)BBK << 12));
-	sum = gte_mac3_add(cpu, sum, LB1 * IR1);
-	sum = gte_mac3_add(cpu, sum, LB2 * IR2);
-	sum = gte_mac3_add(cpu, sum, LB3 * IR3);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-	sum = 0;
-	sum = gte_mac1_add(cpu, sum, ((RGBC & 0xFF) * (u32)IR1) << 4);
-	MAC1 = (s32)sum;
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, (((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
-	MAC2 = (s32)sum;
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, (((RGBC >> 16) & 0xFF) * (u32)IR3) << 4);
-	MAC3 = (s32)sum;
-
-	gte_intpl_color(cpu);
-	gte_rgb_push(cpu);
-	gte_flag_update(cpu);
-}
-
-static void gte_rtp(struct psycho_cpu *const cpu, const s16 x, const s16 y,
-		    const s16 z, const bool is_last_vertex)
-{
-	static const u8 unr_table[] = {
-		0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE,
-		0xEC, 0xEA, 0xE8, 0xE6, 0xE4, 0xE3, 0xE1, 0xDF, 0xDD, 0xDC,
-		0xDA, 0xD8, 0xD6, 0xD5, 0xD3, 0xD1, 0xD0, 0xCE, 0xCD, 0xCB,
-		0xC9, 0xC8, 0xC6, 0xC5, 0xC3, 0xC1, 0xC0, 0xBE, 0xBD, 0xBB,
-		0xBA, 0xB8, 0xB7, 0xB5, 0xB4, 0xB2, 0xB1, 0xB0, 0xAE, 0xAD,
-		0xAB, 0xAA, 0xA9, 0xA7, 0xA6, 0xA4, 0xA3, 0xA2, 0xA0, 0x9F,
-		0x9E, 0x9C, 0x9B, 0x9A, 0x99, 0x97, 0x96, 0x95, 0x94, 0x92,
-		0x91, 0x90, 0x8F, 0x8D, 0x8C, 0x8B, 0x8A, 0x89, 0x87, 0x86,
-		0x85, 0x84, 0x83, 0x82, 0x81, 0x7F, 0x7E, 0x7D, 0x7C, 0x7B,
-		0x7A, 0x79, 0x78, 0x77, 0x75, 0x74, 0x73, 0x72, 0x71, 0x70,
-		0x6F, 0x6E, 0x6D, 0x6C, 0x6B, 0x6A, 0x69, 0x68, 0x67, 0x66,
-		0x65, 0x64, 0x63, 0x62, 0x61, 0x60, 0x5F, 0x5E, 0x5D, 0x5D,
-		0x5C, 0x5B, 0x5A, 0x59, 0x58, 0x57, 0x56, 0x55, 0x54, 0x53,
-		0x53, 0x52, 0x51, 0x50, 0x4F, 0x4E, 0x4D, 0x4D, 0x4C, 0x4B,
-		0x4A, 0x49, 0x48, 0x48, 0x47, 0x46, 0x45, 0x44, 0x43, 0x43,
-		0x42, 0x41, 0x40, 0x3F, 0x3F, 0x3E, 0x3D, 0x3C, 0x3C, 0x3B,
-		0x3A, 0x39, 0x39, 0x38, 0x37, 0x36, 0x36, 0x35, 0x34, 0x33,
-		0x33, 0x32, 0x31, 0x31, 0x30, 0x2F, 0x2E, 0x2E, 0x2D, 0x2C,
-		0x2C, 0x2B, 0x2A, 0x2A, 0x29, 0x28, 0x28, 0x27, 0x26, 0x26,
-		0x25, 0x24, 0x24, 0x23, 0x22, 0x22, 0x21, 0x20, 0x20, 0x1F,
-		0x1E, 0x1E, 0x1D, 0x1D, 0x1C, 0x1B, 0x1B, 0x1A, 0x19, 0x19,
-		0x18, 0x18, 0x17, 0x16, 0x16, 0x15, 0x15, 0x14, 0x14, 0x13,
-		0x12, 0x12, 0x11, 0x11, 0x10, 0x0F, 0x0F, 0x0E, 0x0E, 0x0D,
-		0x0D, 0x0C, 0x0C, 0x0B, 0x0A, 0x0A, 0x09, 0x09, 0x08, 0x08,
-		0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04, 0x03, 0x03,
-		0x02, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00
-	};
-
-	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(cpu->instr);
-
-	s64 sum = 0;
-	sum = gte_mac1_add(cpu, sum, (s64)((u64)TRX << 12));
-	sum = gte_mac1_add(cpu, sum, RT11 * x);
-	sum = gte_mac1_add(cpu, sum, RT12 * y);
-	sum = gte_mac1_add(cpu, sum, RT13 * z);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, (s64)((u64)TRY << 12));
-	sum = gte_mac2_add(cpu, sum, RT21 * x);
-	sum = gte_mac2_add(cpu, sum, RT22 * y);
-	sum = gte_mac2_add(cpu, sum, RT23 * z);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, (s64)((u64)TRZ << 12));
-	sum = gte_mac3_add(cpu, sum, RT31 * x);
-	sum = gte_mac3_add(cpu, sum, RT32 * y);
-	sum = gte_mac3_add(cpu, sum, RT33 * z);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-	gte_sz_push(cpu, sum);
-
-	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, (s32)(sum >> 12), false);
-	IR3 = (s16)clamp(MAC3,
-			 lm ? CPU_CP2_CPR_IR123_LM_MIN : CPU_CP2_CPR_IR123_MIN,
-			 CPU_CP2_CPR_IR123_MAX);
-
-	s64 quot;
-
-	if (H < (SZ3 * 2)) {
-		const int i = SZ3 ? __builtin_clz(SZ3) - 16 : 16;
-		quot = H << i;
-		s64 d = SZ3 << i;
-		const uint u = unr_table[(d - 0x7FC0) >> 7] + 0x101;
-		d = (0x2000080 - (d * u)) >> 8;
-		d = (0x0000080 + (d * u)) >> 8;
-		quot = min(0x1FFFF, ((quot * d) + 0x8000) >> 16);
-	} else {
-		quot = 0x1FFFF;
-		FLAG |= CPU_CP2_CCR_FLAG_DIV_OVF;
-	}
-
-	sum = gte_mac0_add(cpu, (quot * IR1) + OFX);
-	const s16 sx = gte_chk_sx2(cpu, (s32)(sum >> 16));
-
-	sum = gte_mac0_add(cpu, (quot * IR2) + OFY);
-	const s16 sy = gte_chk_sy2(cpu, (s32)(sum >> 16));
-
-	gte_sxy_push(cpu, sx, sy);
-
-	if (is_last_vertex) {
-		sum = gte_mac0_add(cpu, (quot * DQA) + DQB);
-		MAC0 = (s32)sum;
-		IR0 = gte_chk_ir0(cpu, (s32)(sum >> 12));
-	}
-	gte_flag_update(cpu);
-}
-
-static void gte_ncc(struct psycho_cpu *const cpu, const s16 x, const s16 y,
-		    const s16 z)
-{
-	const uint SHIFT_FRAC = cpu_instr_shift_frac_get(cpu->instr);
-
-	s64 sum = 0;
-	sum = gte_mac1_add(cpu, sum, L11 * x);
-	sum = gte_mac1_add(cpu, sum, L12 * y);
-	sum = gte_mac1_add(cpu, sum, L13 * z);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, L21 * x);
-	sum = gte_mac2_add(cpu, sum, L22 * y);
-	sum = gte_mac2_add(cpu, sum, L23 * z);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, L31 * x);
-	sum = gte_mac3_add(cpu, sum, L32 * y);
-	sum = gte_mac3_add(cpu, sum, L33 * z);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
-
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-	sum = 0;
-	sum = gte_mac1_add(cpu, sum, (s64)((u64)RBK << 12));
-	sum = gte_mac1_add(cpu, sum, LR1 * IR1);
-	sum = gte_mac1_add(cpu, sum, LR2 * IR2);
-	sum = gte_mac1_add(cpu, sum, LR3 * IR3);
-	MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, (s64)((u64)GBK << 12));
-	sum = gte_mac2_add(cpu, sum, LG1 * IR1);
-	sum = gte_mac2_add(cpu, sum, LG2 * IR2);
-	sum = gte_mac2_add(cpu, sum, LG3 * IR3);
-	MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, (s64)((u64)BBK << 12));
-	sum = gte_mac3_add(cpu, sum, LB1 * IR1);
-	sum = gte_mac3_add(cpu, sum, LB2 * IR2);
-	sum = gte_mac3_add(cpu, sum, LB3 * IR3);
-	MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-	IR1 = gte_chk_ir1(cpu, MAC1, lm);
-	IR2 = gte_chk_ir2(cpu, MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-	sum = 0;
-	sum = gte_mac1_add(cpu, sum, ((RGBC & 0xFF) * (u32)IR1) << 4);
-	MAC1 = (s32)sum;
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, (((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
-	MAC2 = (s32)sum;
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, (((RGBC >> 16) & 0xFF) * (u32)IR3) << 4);
-	MAC3 = (s32)sum;
-
-	sum = 0;
-	sum = gte_mac1_add(cpu, sum, MAC1 >> SHIFT_FRAC);
-	MAC1 = (s32)sum;
-
-	sum = 0;
-	sum = gte_mac2_add(cpu, sum, MAC2 >> SHIFT_FRAC);
-	MAC2 = (s32)sum;
-
-	sum = 0;
-	sum = gte_mac3_add(cpu, sum, MAC3 >> SHIFT_FRAC);
-	MAC3 = (s32)sum;
-
-	gte_rgb_push(cpu);
-	gte_flag_update(cpu);
-}
-
-static void gte_avsz(struct psycho_cpu *const cpu, const s16 scale_factor,
-		     const u16 sz_oldest, const u16 sz_older, const u16 sz_old,
-		     const u16 sz_new)
-{
-	FLAG = 0;
-
-	const s64 sum =
-		gte_mac0_add(cpu, (s64)(scale_factor) * (sz_oldest + sz_older +
-							 sz_old + sz_new));
-	MAC0 = (s32)sum;
-
-	const s32 n = (s32)(sum >> 12);
-
-	OTZ = gte_chk_sz3_otz(cpu, n);
-	gte_flag_update(cpu);
-}
-
 /// @brief Branches to the target address if a condition was met.
 /// @param ctx The psycho_ctx instance.
 /// @param condition_met `true` if the branch condition was met, or `false`
@@ -979,7 +405,7 @@ static void exc_raise(struct psycho_cpu *const cpu, const uint exc_code)
 	// sets the ExcCode field to the specified exception code.
 	Cause = (Cause & ~0xFFFF00FF) | (exc_code << 2);
 
-	/// 4) transfers control to the exception entry point.
+	// 4) transfers control to the exception entry point.
 	PC = CPU_VEC_EXC - sizeof(u32);
 	NPC = CPU_VEC_EXC + sizeof(u32);
 }
@@ -1063,1178 +489,792 @@ void cpu_step(struct psycho_cpu *const cpu)
 #define SEXT_IMM	(cpu_instr_sext_imm_get(cpu->instr))
 	// clang-format on
 
+	// clang-format off
+	static const void *const op_tbl[] = {
+		[GROUP_SPECIAL]	= &&special,
+		[GROUP_BCOND]	= &&bcond,
+		[J]		= &&op_j,
+		[JAL]		= &&op_jal,
+		[BEQ]		= &&op_beq,
+		[BNE]		= &&op_bne,
+		[BLEZ]		= &&op_blez,
+		[BGTZ]		= &&op_bgtz,
+		[ADDI]		= &&op_addi,
+		[ADDIU]		= &&op_addiu,
+		[SLTI]		= &&op_slti,
+		[SLTIU]		= &&op_sltiu,
+		[ANDI]		= &&op_andi,
+		[ORI]		= &&op_ori,
+		[XORI]		= &&op_xori,
+		[LUI]		= &&op_lui,
+		[GROUP_COP0]	= &&cp0,
+		[GROUP_COP1]	= &&illegal,
+		[GROUP_COP2]	= &&cp2,
+		[GROUP_COP3]	= &&illegal,
+		[0x14 ... 0x1F]	= &&illegal,
+		[LB]		= &&op_lb,
+		[LH]		= &&op_lh,
+		[LWL]		= &&op_lwl,
+		[LW]		= &&op_lw,
+		[LBU]		= &&op_lbu,
+		[LHU]		= &&op_lhu,
+		[LWR]		= &&op_lwr,
+		[0x27]		= &&illegal,
+		[SB]		= &&op_sb,
+		[SH]		= &&op_sh,
+		[SWL]		= &&op_swl,
+		[SW]		= &&op_sw,
+		[0x2C ... 0x2D]	= &&illegal,
+		[SWR]		= &&op_swr,
+		[0x2F ... 0x31]	= &&illegal,
+		[LWC2]		= &&op_lwc2,
+		[0x33 ... 0x39]	= &&illegal,
+		[SWC2]		= &&op_swc2,
+		[0x3B ... 0x3F]	= &&illegal
+	};
+
+	// clang-format off
+	static const void *const special_tbl[] = {
+		[SLL] 		= &&op_sll,
+		[0x01]		= &&illegal,
+		[SRL]		= &&op_srl,
+		[SRA]		= &&op_sra,
+		[SLLV]		= &&op_sllv,
+		[0x05]		= &&illegal,
+		[SRLV]		= &&op_srlv,
+		[SRAV]		= &&op_srav,
+		[JR]		= &&op_jr,
+		[JALR]		= &&op_jalr,
+		[0x0A ... 0x0B]	= &&illegal,
+		[SYSCALL]	= &&op_syscall,
+		[BREAK]		= &&op_break,
+		[0x0E ... 0x0F]	= &&illegal,
+		[MFHI]		= &&op_mfhi,
+		[MTHI]		= &&op_mthi,
+		[MFLO]		= &&op_mflo,
+		[MTLO]		= &&op_mtlo,
+		[0x14 ... 0x17]	= &&illegal,
+		[MULT]		= &&op_mult,
+		[MULTU]		= &&op_multu,
+		[DIV]		= &&op_div,
+		[DIVU]		= &&op_divu,
+		[0x1C ... 0x1F]	= &&illegal,
+		[ADD]		= &&op_add,
+		[ADDU]		= &&op_addu,
+		[SUB]		= &&op_sub,
+		[SUBU]		= &&op_subu,
+		[AND]		= &&op_and,
+		[OR]		= &&op_or,
+		[XOR]		= &&op_xor,
+		[NOR]		= &&op_nor,
+		[0x28 ... 0x29]	= &&illegal,
+		[SLT]		= &&op_slt,
+		[SLTU]		= &&op_sltu,
+		[0x2C ... 0x3F]	= &&illegal
+	};
+
+	static const void *const cp0_tbl[] = {
+		[MF]		= &&op_cp0_mf,
+		[0x01 ... 0x03]	= &&op_cp0_funct,
+		[MT]		= &&op_cp0_mt,
+		[0x05 ... 0x1F] = &&op_cp0_funct
+	};
+
+	static const void *const cp0_instr_tbl[] = {
+		[0x00 ... 0x0F] = &&illegal,
+		[RFE]		= &&op_rfe,
+		[0x11 ... 0x3F] = &&illegal
+	};
+
+	static const void *const cp2_tbl[] = {
+		[MF]		= &&op_cp2_mf,
+		[0x01]		= &&op_cp2_funct,
+		[CF]		= &&op_cp2_cf,
+		[0x03]		= &&op_cp2_funct,
+		[MT]		= &&op_cp2_mt,
+		[0x05]		= &&op_cp2_funct,
+		[CT]		= &&op_cp2_ct,
+		[0x07 ... 0x1F] = &&op_cp2_funct,
+	};
+
+	static const void *const cp2_instr_tbl[] = {
+		[0x00]		= &&illegal,
+		[RTPS]		= &&op_rtps,
+		[0x02 ... 0x05]	= &&illegal,
+		[NCLIP]		= &&op_nclip,
+		[0x07 ... 0x0B] = &&illegal,
+		[OP]		= &&op_op,
+		[0x0D ... 0x0F] = &&illegal,
+		[DPCS]		= &&op_dpcs,
+		[INTPL]		= &&op_intpl,
+		[MVMVA]		= &&op_mvmva,
+		[NCDS]		= &&op_ncds,
+		[CDP]		= &&op_cdp,
+		[0x15]		= &&illegal,
+		[NCDT]		= &&op_ncdt,
+		[0x17 ... 0x1A]	= &&illegal,
+		[NCCS]		= &&op_nccs,
+		[CC]		= &&op_cc,
+		[0x1D]		= &&illegal,
+		[NCS]		= &&op_ncs,
+		[0x1F]		= &&illegal,
+		[NCT]		= &&op_nct,
+		[0x21 ... 0x27]	= &&illegal,
+		[SQR]		= &&op_sqr,
+		[DCPL]		= &&op_dcpl,
+		[DPCT]		= &&op_dpct,
+		[0x2B ... 0x2C] = &&illegal,
+		[AVSZ3]		= &&op_avsz3,
+		[AVSZ4]		= &&op_avsz4,
+		[0x2F]		= &&illegal,
+		[RTPT]		= &&op_rtpt,
+		[0x31 ... 0x3C]	= &&illegal,
+		[GPF]		= &&op_gpf,
+		[GPL]		= &&op_gpl,
+		[NCCT]		= &&op_ncct
+	};
+
+	static const void *const cp2_mf_tbl[] = {
+		[CPU_CP2_CPR_VXY0 ... CPU_CP2_CPR_OTZ]	= &&cp2_mf_default,
+		[CPU_CP2_CPR_IR0 ... CPU_CP2_CPR_IR3]	= &&cp2_mf_sext,
+		[CPU_CP2_CPR_SXY0 ... CPU_CP2_CPR_SXY2]	= &&cp2_mf_default,
+		[CPU_CP2_CPR_SXYP]			= &&cp2_mf_sxyp,
+		[CPU_CP2_CPR_SZ0 ... CPU_CP2_CPR_MAC3]	= &&cp2_mf_default,
+		[CPU_CP2_CPR_IRGB ... CPU_CP2_CPR_ORGB]	= &&cp2_mf_iorgb,
+		[CPU_CP2_CPR_LZCS]			= &&cp2_mf_default,
+		[CPU_CP2_CPR_LZCR]			= &&cp2_mf_lzcr
+	};
+
+	static const void *const cp2_cf_tbl[] = {
+		[CPU_CP2_CCR_R11R12 ... CPU_CP2_CCR_OFY]	= &&cp2_cf_default,
+		[CPU_CP2_CCR_H]					= &&cp2_cf_zext,
+		[CPU_CP2_CCR_DQA ... CPU_CP2_CCR_FLAG]		= &&cp2_cf_default
+	};
+
+	static const void *const cp2_mt_tbl[] = {
+		[CPU_CP2_CPR_VXY0]			= &&cp2_mt_default,
+		[CPU_CP2_CPR_VZ0]			= &&cp2_mt_sext,
+		[CPU_CP2_CPR_VXY1]			= &&cp2_mt_default,
+		[CPU_CP2_CPR_VZ1]			= &&cp2_mt_sext,
+		[CPU_CP2_CPR_VXY2]			= &&cp2_mt_default,
+		[CPU_CP2_CPR_VZ2]			= &&cp2_mt_sext,
+		[CPU_CP2_CPR_RGB]			= &&cp2_mt_default,
+		[CPU_CP2_CPR_OTZ]			= &&cp2_mt_zext,
+		[CPU_CP2_CPR_IR0]			= &&cp2_mt_sext,
+		[CPU_CP2_CPR_IR1 ... CPU_CP2_CPR_SXY2]	= &&cp2_mt_default,
+		[CPU_CP2_CPR_SXYP]			= &&cp2_mt_sxyp,
+		[CPU_CP2_CPR_SZ0 ... CPU_CP2_CPR_SZ3]	= &&cp2_mt_zext,
+		[CPU_CP2_CPR_RGB0 ... CPU_CP2_CPR_MAC3]	= &&cp2_mt_default,
+		[CPU_CP2_CPR_IRGB]			= &&cp2_mt_irgb,
+		[CPU_CP2_CPR_ORGB ... CPU_CP2_CPR_LZCR]	= &&cp2_mt_default
+	};
+
+	static const void *const cp2_ct_tbl[] = {
+		[CPU_CP2_CCR_R11R12 ... CPU_CP2_CCR_R31R32]	= &&cp2_ct_default,
+		[CPU_CP2_CCR_R33]				= &&cp2_ct_sext,
+		[CPU_CP2_CCR_TRX ... CPU_CP2_CCR_L31L32]	= &&cp2_ct_default,
+		[CPU_CP2_CCR_L33]				= &&cp2_ct_sext,
+		[CPU_CP2_CCR_RBK ... CPU_CP2_CCR_LB1LB2]	= &&cp2_ct_default,
+		[CPU_CP2_CCR_LB3]				= &&cp2_ct_sext,
+		[CPU_CP2_CCR_RFC ... CPU_CP2_CCR_H]		= &&cp2_ct_default,
+		[CPU_CP2_CCR_DQA]				= &&cp2_ct_sext,
+		[CPU_CP2_CCR_DQB]				= &&cp2_ct_default,
+		[CPU_CP2_CCR_ZSF3 ... CPU_CP2_CCR_ZSF4]		= &&cp2_ct_sext,
+		[CPU_CP2_CCR_FLAG]				= &&cp2_ct_flag
+	};
+	// clang-format on
+
+	u64 prod;
+	uint shift, mask;
+	u32 jmp_tgt, sum, paddr, vaddr, data, word, aligned_paddr;
+	s32 b, g, r;
+	s16 signed_hword;
+	u16 hword;
+	bool cond_met;
+	u8 ubyte;
+	s8 sbyte;
+
 	PC = (u32)(NPC - sizeof(u32));
 	NPC += sizeof(u32);
 
-	switch (op) {
-	case GROUP_SPECIAL:
-		switch (funct) {
-		case SLL:
-			GPR[rd] = GPR[rt] << shamt;
-			break;
+	goto *op_tbl[op];
 
-		case SRL:
-			GPR[rd] = GPR[rt] >> shamt;
-			break;
+special:
+	goto *special_tbl[funct];
 
-		case SRA:
-			GPR[rd] = (u32)((s32)GPR[rt] >> shamt);
-			break;
+op_sll:
+	GPR[rd] = GPR[rt] << shamt;
+	goto end;
 
-		case SLLV:
-			GPR[rd] = GPR[rt] << (GPR[rs] & 0x1F);
-			break;
+op_srl:
+	GPR[rd] = GPR[rt] >> shamt;
+	goto end;
 
-		case SRLV:
-			GPR[rd] = GPR[rt] >> (GPR[rs] & 0x1F);
-			break;
+op_sra:
+	GPR[rd] = (u32)((s32)GPR[rt] >> shamt);
+	goto end;
 
-		case SRAV:
-			GPR[rd] = (u32)((s32)GPR[rt] >> (GPR[rs] & 0x1F));
-			break;
+op_sllv:
+	GPR[rd] = GPR[rt] << (GPR[rs] & 0x1F);
+	goto end;
 
-		case JR:
-			if (unlikely((GPR[rs] & 3) != 0)) {
-				EXC_RAISE(AdEL);
-				break;
-			}
-			NPC = GPR[rs];
-			break;
+op_srlv:
+	GPR[rd] = GPR[rt] >> (GPR[rs] & 0x1F);
+	goto end;
 
-		case JALR: {
-			const u32 jmp_tgt = GPR[rs];
+op_srav:
+	GPR[rd] = (u32)((s32)GPR[rt] >> (GPR[rs] & 0x1F));
+	goto end;
 
-			GPR[rd] = PC + 8;
-
-			if (unlikely((jmp_tgt & 3) != 0)) {
-				EXC_RAISE(AdEL);
-				break;
-			}
-
-			NPC = jmp_tgt;
-			break;
-		}
-
-		case SYSCALL:
-			EXC_RAISE(Sys);
-			break;
-
-		case BREAK:
-			EXC_RAISE(Bp);
-			break;
-
-		case MFHI:
-			GPR[rd] = HI;
-			break;
-
-		case MFLO:
-			GPR[rd] = LO;
-			break;
-
-		case MTHI:
-			HI = GPR[rs];
-			break;
-
-		case MTLO:
-			LO = GPR[rs];
-			break;
-
-		case MULT: {
-			const u64 prod =
-				(u64)((s64)(s32)GPR[rs] * (s64)(s32)GPR[rt]);
-
-			LO = (u32)(prod & 0xFFFFFFFF);
-			HI = (u32)(prod >> 32);
-
-			break;
-		}
-
-		case MULTU: {
-			const u64 prod = (u64)GPR[rs] * (u64)GPR[rt];
-
-			LO = prod & 0xFFFFFFFF;
-			HI = (u32)(prod >> 32);
-
-			break;
-		}
-
-		case DIV: {
-			// The result of a division by zero is consistent with a
-			// simple radix-2 ("one bit at a time") implementation.
-			if ((s32)GPR[rt] == 0) {
-				LO = ((s32)GPR[rs] < 0) ? 1 : 0xFFFFFFFF;
-				HI = (u32)(s32)GPR[rs];
-			} else if ((GPR[rs] == 0x80000000) &&
-				   GPR[rt] == 0xFFFFFFFF) {
-				LO = 0x80000000;
-				HI = 0;
-			} else {
-				LO = (u32)((s32)GPR[rs] / (s32)GPR[rt]);
-				HI = (u32)((s32)GPR[rs] % (s32)GPR[rt]);
-			}
-			break;
-		}
-
-		case DIVU: {
-			if (GPR[rt] == 0) {
-				LO = 0xFFFFFFFF;
-				HI = GPR[rs];
-			} else {
-				LO = GPR[rs] / GPR[rt];
-				HI = GPR[rs] % GPR[rt];
-			}
-			break;
-		}
-
-		case ADD: {
-			const u32 sum = GPR[rs] + GPR[rt];
-
-			if (ovf_add(GPR[rs], GPR[rt], sum)) {
-				EXC_RAISE(Ovf);
-				break;
-			}
-			GPR[rd] = sum;
-			break;
-		}
-
-		case ADDU:
-			GPR[rd] = GPR[rs] + GPR[rt];
-			break;
-
-		case SUB: {
-			const u32 sum = GPR[rs] - GPR[rt];
-
-			if (ovf_sub(GPR[rs], GPR[rt], sum)) {
-				EXC_RAISE(Ovf);
-				break;
-			}
-			GPR[rd] = sum;
-			break;
-		}
-
-		case SUBU:
-			GPR[rd] = GPR[rs] - GPR[rt];
-			break;
-
-		case AND:
-			GPR[rd] = GPR[rs] & GPR[rt];
-			break;
-
-		case OR:
-			GPR[rd] = GPR[rs] | GPR[rt];
-			break;
-
-		case XOR:
-			GPR[rd] = GPR[rs] ^ GPR[rt];
-			break;
-
-		case NOR:
-			GPR[rd] = ~(GPR[rs] | GPR[rt]);
-			break;
-
-		case SLT:
-			GPR[rd] = (s32)GPR[rs] < (s32)GPR[rt];
-			break;
-
-		case SLTU:
-			GPR[rd] = GPR[rs] < GPR[rt];
-			break;
-
-		default:
-			EXC_RAISE(RI);
-			break;
-		}
-		break;
-
-	case GROUP_BCOND: {
-		const bool cond_met = ((s32)GPR[rs] < 0) ^ (rt & 1);
-
-		if ((rt & 0x1E) == 0x10) {
-			GPR[ra] = PC + 8;
-		}
-
-		BRANCH_IF(cond_met);
-		break;
+op_jr:
+	if (unlikely((GPR[rs] & 3) != 0)) {
+		EXC_RAISE(AdEL);
+		goto end;
 	}
+	NPC = GPR[rs];
+	goto end;
 
-	case J:
-		NPC = JMP_TGT;
-		break;
+op_jalr:
+	jmp_tgt = GPR[rs];
 
-	case JAL:
+	GPR[rd] = PC + 8;
+
+	if (unlikely((jmp_tgt & 3) != 0)) {
+		EXC_RAISE(AdEL);
+		goto end;
+	}
+	NPC = jmp_tgt;
+	goto end;
+
+op_syscall:
+	EXC_RAISE(Sys);
+	goto end;
+
+op_break:
+	EXC_RAISE(Bp);
+	goto end;
+
+op_mfhi:
+	GPR[rd] = HI;
+	goto end;
+
+op_mflo:
+	GPR[rd] = LO;
+	goto end;
+
+op_mthi:
+	HI = GPR[rs];
+	goto end;
+
+op_mtlo:
+	LO = GPR[rs];
+	goto end;
+
+op_mult:
+	prod = (u64)((s64)(s32)GPR[rs] * (s64)(s32)GPR[rt]);
+
+	LO = (u32)(prod & 0xFFFFFFFF);
+	HI = (u32)(prod >> 32);
+
+	goto end;
+
+op_multu:
+	prod = (u64)GPR[rs] * (u64)GPR[rt];
+
+	LO = prod & 0xFFFFFFFF;
+	HI = (u32)(prod >> 32);
+
+	goto end;
+
+op_div:
+	// The result of a division by zero is consistent with a simple
+	// radix-2 ("one bit at a time") implementation.
+	if ((s32)GPR[rt] == 0) {
+		LO = ((s32)GPR[rs] < 0) ? 1 : 0xFFFFFFFF;
+		HI = (u32)(s32)GPR[rs];
+	} else if ((GPR[rs] == 0x80000000) && GPR[rt] == 0xFFFFFFFF) {
+		LO = 0x80000000;
+		HI = 0;
+	} else {
+		LO = (u32)((s32)GPR[rs] / (s32)GPR[rt]);
+		HI = (u32)((s32)GPR[rs] % (s32)GPR[rt]);
+	}
+	goto end;
+
+op_divu:
+	if (GPR[rt] == 0) {
+		LO = 0xFFFFFFFF;
+		HI = GPR[rs];
+	} else {
+		LO = GPR[rs] / GPR[rt];
+		HI = GPR[rs] % GPR[rt];
+	}
+	goto end;
+
+op_add:
+	sum = GPR[rs] + GPR[rt];
+
+	if (ovf_add(GPR[rs], GPR[rt], sum)) {
+		EXC_RAISE(Ovf);
+		goto end;
+	}
+	GPR[rd] = sum;
+	goto end;
+
+op_addu:
+	GPR[rd] = GPR[rs] + GPR[rt];
+	goto end;
+
+op_sub:
+	sum = GPR[rs] - GPR[rt];
+
+	if (ovf_sub(GPR[rs], GPR[rt], sum)) {
+		EXC_RAISE(Ovf);
+		goto end;
+	}
+	GPR[rd] = sum;
+	goto end;
+
+op_subu:
+	GPR[rd] = GPR[rs] - GPR[rt];
+	goto end;
+
+op_and:
+	GPR[rd] = GPR[rs] & GPR[rt];
+	goto end;
+
+op_or:
+	GPR[rd] = GPR[rs] | GPR[rt];
+	goto end;
+
+op_xor:
+	GPR[rd] = GPR[rs] ^ GPR[rt];
+	goto end;
+
+op_nor:
+	GPR[rd] = ~(GPR[rs] | GPR[rt]);
+	goto end;
+
+op_slt:
+	GPR[rd] = (s32)GPR[rs] < (s32)GPR[rt];
+	goto end;
+
+op_sltu:
+	GPR[rd] = GPR[rs] < GPR[rt];
+	goto end;
+
+bcond:
+	cond_met = ((s32)GPR[rs] < 0) ^ (rt & 1);
+
+	if ((rt & 0x1E) == 0x10) {
 		GPR[ra] = PC + 8;
-		NPC = JMP_TGT;
-
-		break;
-
-	case BEQ:
-		BRANCH_IF(GPR[rs] == GPR[rt]);
-		break;
-
-	case BNE:
-		BRANCH_IF(GPR[rs] != GPR[rt]);
-		break;
-
-	case BLEZ:
-		BRANCH_IF((s32)GPR[rs] <= 0);
-		break;
-
-	case BGTZ:
-		BRANCH_IF((s32)GPR[rs] > 0);
-		break;
-
-	case ORI:
-		GPR[rt] = GPR[rs] | ZEXT_IMM;
-		break;
-
-	case XORI:
-		GPR[rt] = GPR[rs] ^ ZEXT_IMM;
-		break;
-
-	case ADDI: {
-		const u32 sum = GPR[rs] + SEXT_IMM;
-
-		if (ovf_add(GPR[rs], SEXT_IMM, sum)) {
-			EXC_RAISE(Ovf);
-			break;
-		}
-		GPR[rt] = sum;
-		break;
 	}
 
-	case ADDIU:
-		GPR[rt] = GPR[rs] + SEXT_IMM;
-		break;
-
-	case SLTI:
-		GPR[rt] = (s32)GPR[rs] < (s32)SEXT_IMM;
-		break;
-
-	case SLTIU:
-		GPR[rt] = GPR[rs] < SEXT_IMM;
-		break;
-
-	case ANDI:
-		GPR[rt] = GPR[rs] & ZEXT_IMM;
-		break;
-
-	case LUI:
-		GPR[rt] = ZEXT_IMM << 16;
-		break;
-
-	case GROUP_COP0:
-		switch (rs) {
-		case MF:
-			GPR[rt] = CP0_CPR[rd];
-			break;
-
-		case MT:
-			CP0_CPR[rd] = GPR[rt];
-			break;
-
-		default:
-			switch (funct) {
-			case RFE:
-				SR = (SR & 0xFFFFFFF0) | ((SR & 0x3C) >> 2);
-				break;
-
-			default:
-				EXC_RAISE(RI);
-				break;
-			}
-			break;
-		}
-		break;
-
-	case GROUP_COP2:
-		switch (rs) {
-		case MF:
-			switch (rd) {
-			case CPU_CP2_CPR_IR0:
-			case CPU_CP2_CPR_IR1:
-			case CPU_CP2_CPR_IR2:
-			case CPU_CP2_CPR_IR3:
-				GPR[rt] = (u32)(s16)CP2_CPR[rd];
-				break;
-
-			case CPU_CP2_CPR_SXYP:
-				GPR[rt] = (u32)SXY2;
-				break;
-
-			case CPU_CP2_CPR_IRGB:
-			case CPU_CP2_CPR_ORGB: {
-				s32 b = IR3 >> 7;
-				s32 g = IR2 >> 7;
-				s32 r = IR1 >> 7;
-
-				b = clamp(b, 0x00, 0x1F) << 10;
-				g = clamp(g, 0x00, 0x1F) << 5;
-				r = clamp(r, 0x00, 0x1F);
-
-				GPR[rt] = (u32)(b | g | r);
-				break;
-			}
-
-			case CPU_CP2_CPR_LZCR: {
-				if (LZCS > 0) {
-					GPR[rt] =
-						(u32)__builtin_clz((uint)LZCS);
-				} else if (LZCS < 0) {
-					const uint n = (uint)~LZCS;
-					GPR[rt] = n ? (u32)__builtin_clz(n) :
-						      32;
-				} else {
-					GPR[rt] = 32;
-				}
-				break;
-			}
-
-			default:
-				GPR[rt] = CP2_CPR[rd];
-				break;
-			}
-			break;
-
-		case CF:
-			switch (rd) {
-			case CPU_CP2_CCR_H:
-				GPR[rt] = (u32)(s16)CP2_CCR[rd];
-				break;
-
-			default:
-				GPR[rt] = CP2_CCR[rd];
-				break;
-			}
-			break;
-
-		case MT:
-			switch (rd) {
-			case CPU_CP2_CPR_VZ0:
-			case CPU_CP2_CPR_VZ1:
-			case CPU_CP2_CPR_VZ2:
-			case CPU_CP2_CPR_IR0:
-				CP2_CPR[rd] = (u32)(s16)GPR[rt];
-				break;
-
-			case CPU_CP2_CPR_OTZ:
-			case CPU_CP2_CPR_SZ0:
-			case CPU_CP2_CPR_SZ1:
-			case CPU_CP2_CPR_SZ2:
-			case CPU_CP2_CPR_SZ3:
-				CP2_CPR[rd] = (u16)GPR[rt];
-				break;
-
-			case CPU_CP2_CPR_SXYP:
-				SXY0 = SXY1;
-				SXY1 = SXY2;
-				SXY2 = (s32)GPR[rt];
-
-				break;
-
-			case CPU_CP2_CPR_IRGB:
-				IR1 = (s16)((GPR[rt] & 0x1F) << 7);
-				IR2 = (s16)(((GPR[rt] >> 5) & 0x1F) << 7);
-				IR3 = (s16)(((GPR[rt] >> 10) & 0x1F) << 7);
-
-				break;
-
-			default:
-				CP2_CPR[rd] = GPR[rt];
-				break;
-			}
-			break;
-
-		case CT:
-			switch (rd) {
-			case CPU_CP2_CCR_R33:
-			case CPU_CP2_CCR_L33:
-			case CPU_CP2_CCR_LB3:
-			case CPU_CP2_CCR_DQA:
-			case CPU_CP2_CCR_ZSF3:
-			case CPU_CP2_CCR_ZSF4:
-				CP2_CCR[rd] = (u32)(s16)GPR[rt];
-				break;
-
-			case CPU_CP2_CCR_FLAG:
-				FLAG = GPR[rt] & CPU_CP2_CCR_FLAG_MASK_WRITE;
-				gte_flag_update(cpu);
-
-				break;
-
-			default:
-				CP2_CCR[rd] = GPR[rt];
-				break;
-			}
-			break;
-
-		default:
-			switch (funct) {
-			case RTPS:
-				FLAG = 0;
-
-				gte_rtp(cpu, VX0, VY0, VZ0, true);
-				break;
-
-			case NCLIP: {
-				FLAG = 0;
-
-				MAC0 = gte_mac0_add(
-					cpu, (s64)(SX0 * (SY1 - SY2)) +
-						     (SX1 * (SY2 - SY0)) +
-						     (SX2 * (SY0 - SY1)));
-
-				gte_flag_update(cpu);
-				break;
-			}
-
-			case OP: {
-				FLAG = 0;
-
-				const uint SHIFT_FRAC =
-					cpu_instr_shift_frac_get(cpu->instr);
-
-				s64 sum = 0;
-				sum = gte_mac1_add(cpu, sum,
-						   (IR3 * D2) - (IR2 * D3));
-				MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac2_add(cpu, sum,
-						   (IR1 * D3) - (IR3 * D1));
-				MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac3_add(cpu, sum,
-						   (IR2 * D1) - (IR1 * D2));
-				MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-				const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
-
-				IR1 = gte_chk_ir1(cpu, MAC1, lm);
-				IR2 = gte_chk_ir2(cpu, MAC2, lm);
-				IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-				gte_flag_update(cpu);
-				break;
-			}
-
-			case DPCS:
-				FLAG = 0;
-
-				gte_dpc(cpu, RGBC);
-				break;
-
-			case INTPL:
-				FLAG = 0;
-
-				MAC1 = IR1 << 12;
-				MAC2 = IR2 << 12;
-				MAC3 = IR3 << 12;
-
-				gte_intpl_color(cpu);
-				gte_rgb_push(cpu);
-				gte_flag_update(cpu);
-
-				break;
-
-			case MVMVA: {
-				FLAG = 0;
-
-				s32 Tx1;
-				s32 Tx2;
-				s32 Tx3;
-				s16 Vx1;
-				s16 Vx2;
-				s16 Vx3;
-				s16 Mx11;
-				s16 Mx12;
-				s16 Mx13;
-				s16 Mx21;
-				s16 Mx22;
-				s16 Mx23;
-				s16 Mx31;
-				s16 Mx32;
-				s16 Mx33;
-
-				const uint mx = cpu_instr_mx_get(cpu->instr);
-				const uint vx = cpu_instr_vx_get(cpu->instr);
-				const uint tx = cpu_instr_tx_get(cpu->instr);
-
-				switch (mx) {
-				case 0:
-					Mx11 = RT11;
-					Mx12 = RT12;
-					Mx13 = RT13;
-					Mx21 = RT21;
-					Mx22 = RT22;
-					Mx23 = RT23;
-					Mx31 = RT31;
-					Mx32 = RT32;
-					Mx33 = RT33;
-
-					break;
-
-				case 1:
-					Mx11 = L11;
-					Mx12 = L12;
-					Mx13 = L13;
-					Mx21 = L21;
-					Mx22 = L22;
-					Mx23 = L23;
-					Mx31 = L31;
-					Mx32 = L32;
-					Mx33 = L33;
-
-					break;
-
-				case 2:
-					Mx11 = LR1;
-					Mx12 = LR2;
-					Mx13 = LR3;
-					Mx21 = LG1;
-					Mx22 = LG2;
-					Mx23 = LG3;
-					Mx31 = LB1;
-					Mx32 = LB2;
-					Mx33 = LB3;
-
-					break;
-
-				case 3:
-					Mx11 = (s16) - ((RGBC & 0xFF) << 4);
-					Mx12 = (s16)((RGBC & 0xFF) << 4);
-					Mx13 = IR0;
-					Mx21 = RT13;
-					Mx22 = RT13;
-					Mx23 = RT13;
-					Mx31 = RT22;
-					Mx32 = RT22;
-					Mx33 = RT22;
-
-					break;
-
-				default:
-					UNREACHABLE;
-				}
-
-				switch (vx) {
-				case 0:
-					Vx1 = VX0;
-					Vx2 = VY0;
-					Vx3 = VZ0;
-					break;
-
-				case 1:
-					Vx1 = VX1;
-					Vx2 = VY1;
-					Vx3 = VZ1;
-					break;
-
-				case 2:
-					Vx1 = VX2;
-					Vx2 = VY2;
-					Vx3 = VZ2;
-					break;
-
-				case 3:
-					Vx1 = IR1;
-					Vx2 = IR2;
-					Vx3 = IR3;
-					break;
-
-				default:
-					UNREACHABLE;
-				}
-
-				switch (tx) {
-				case 0:
-					Tx1 = TRX;
-					Tx2 = TRY;
-					Tx3 = TRZ;
-					break;
-
-				case 1:
-					Tx1 = RBK;
-					Tx2 = GBK;
-					Tx3 = BBK;
-					break;
-
-				case 2:
-					Tx1 = RFC;
-					Tx2 = GFC;
-					Tx3 = BFC;
-					break;
-
-				case 3:
-					Tx1 = 0;
-					Tx2 = 0;
-					Tx3 = 0;
-					break;
-
-				default:
-					UNREACHABLE;
-				}
-
-				s64 sum;
-				const uint SHIFT_FRAC =
-					cpu_instr_shift_frac_get(cpu->instr);
-				const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
-
-				if (tx == 2) {
-					sum = gte_mac1_add(
-						cpu, 0, (s64)((u64)Tx1 << 12));
-					sum = gte_mac1_add(cpu, sum,
-							   Mx11 * Vx1);
-					MAC1 = (s32)(sum >> SHIFT_FRAC);
-					IR1 = gte_chk_ir1(cpu, MAC1, false);
-
-					sum = gte_mac1_add(cpu, 0, Mx12 * Vx2);
-					sum = gte_mac1_add(cpu, sum,
-							   Mx13 * Vx3);
-					MAC1 = (s32)(sum >> SHIFT_FRAC);
-					IR1 = gte_chk_ir1(cpu, MAC1, lm);
-
-					sum = gte_mac2_add(
-						cpu, 0, (s64)((u64)Tx2 << 12));
-					sum = gte_mac2_add(cpu, sum,
-							   Mx21 * Vx1);
-					MAC2 = (s32)(sum >> SHIFT_FRAC);
-					IR2 = gte_chk_ir2(cpu, MAC2, false);
-
-					sum = gte_mac2_add(cpu, 0, Mx22 * Vx2);
-					sum = gte_mac2_add(cpu, sum,
-							   Mx23 * Vx3);
-					MAC2 = (s32)(sum >> SHIFT_FRAC);
-					IR2 = gte_chk_ir2(cpu, MAC2, lm);
-
-					sum = gte_mac3_add(
-						cpu, 0, (s64)((u64)Tx3 << 12));
-					sum = gte_mac3_add(cpu, sum,
-							   Mx31 * Vx1);
-					MAC3 = (s32)(sum >> SHIFT_FRAC);
-					IR3 = gte_chk_ir3(cpu, MAC3, false);
-
-					sum = gte_mac3_add(cpu, 0, Mx32 * Vx2);
-					sum = gte_mac3_add(cpu, sum,
-							   Mx33 * Vx3);
-					MAC3 = (s32)(sum >> SHIFT_FRAC);
-					IR3 = gte_chk_ir3(cpu, MAC3, lm);
-				} else {
-					sum = gte_mac1_add(
-						cpu, 0, (s64)((u64)Tx1 << 12));
-					sum = gte_mac1_add(cpu, sum,
-							   Mx11 * Vx1);
-					sum = gte_mac1_add(cpu, sum,
-							   Mx12 * Vx2);
-					sum = gte_mac1_add(cpu, sum,
-							   Mx13 * Vx3);
-					MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-					sum = gte_mac2_add(
-						cpu, 0, (s64)((u64)Tx2 << 12));
-					sum = gte_mac2_add(cpu, sum,
-							   Mx21 * Vx1);
-					sum = gte_mac2_add(cpu, sum,
-							   Mx22 * Vx2);
-					sum = gte_mac2_add(cpu, sum,
-							   Mx23 * Vx3);
-					MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-					sum = gte_mac3_add(
-						cpu, 0, (s64)((u64)Tx3 << 12));
-					sum = gte_mac3_add(cpu, sum,
-							   Mx31 * Vx1);
-					sum = gte_mac3_add(cpu, sum,
-							   Mx32 * Vx2);
-					sum = gte_mac3_add(cpu, sum,
-							   Mx33 * Vx3);
-					MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-					IR1 = gte_chk_ir1(cpu, MAC1, lm);
-					IR2 = gte_chk_ir2(cpu, MAC2, lm);
-					IR3 = gte_chk_ir3(cpu, MAC3, lm);
-				}
-				gte_flag_update(cpu);
-				break;
-			}
-
-			case NCDS:
-				FLAG = 0;
-
-				gte_ncd(cpu, VX0, VY0, VZ0);
-				break;
-
-			case CDP: {
-				FLAG = 0;
-
-				const uint SHIFT_FRAC =
-					cpu_instr_shift_frac_get(
-						cpu->instr);
-
-				s64 sum = 0;
-				sum = gte_mac1_add(cpu, sum,
-						   (s64)((u64)RBK << 12));
-				sum = gte_mac1_add(cpu, sum, LR1 * IR1);
-				sum = gte_mac1_add(cpu, sum, LR2 * IR2);
-				sum = gte_mac1_add(cpu, sum, LR3 * IR3);
-				MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac2_add(cpu, sum,
-						   (s64)((u64)GBK << 12));
-				sum = gte_mac2_add(cpu, sum, LG1 * IR1);
-				sum = gte_mac2_add(cpu, sum, LG2 * IR2);
-				sum = gte_mac2_add(cpu, sum, LG3 * IR3);
-				MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac3_add(cpu, sum,
-						   (s64)((u64)BBK << 12));
-				sum = gte_mac3_add(cpu, sum, LB1 * IR1);
-				sum = gte_mac3_add(cpu, sum, LB2 * IR2);
-				sum = gte_mac3_add(cpu, sum, LB3 * IR3);
-				MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-				const bool lm = cpu->instr &
-						CPU_INSTR_LM_FLAG;
-
-				IR1 = gte_chk_ir1(cpu, MAC1, lm);
-				IR2 = gte_chk_ir2(cpu, MAC2, lm);
-				IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-				sum = 0;
-				sum = gte_mac1_add(cpu, sum,
-						   ((RGBC & 0xFF) * (u32)IR1)
-							   << 4);
-				MAC1 = (s32)sum;
-
-				sum = 0;
-				sum = gte_mac2_add(
-					cpu, sum,
-					(((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
-				MAC2 = (s32)sum;
-
-				sum = 0;
-				sum = gte_mac3_add(
-					cpu, sum,
-					(((RGBC >> 16) & 0xFF) * (u32)IR3)
-						<< 4);
-				MAC3 = (s32)sum;
-
-				gte_intpl_color(cpu);
-				gte_rgb_push(cpu);
-				gte_flag_update(cpu);
-
-				break;
-			}
-
-			case NCDT:
-				FLAG = 0;
-
-				gte_ncd(cpu, VX0, VY0, VZ0);
-				gte_ncd(cpu, VX1, VY1, VZ1);
-				gte_ncd(cpu, VX2, VY2, VZ2);
-
-				break;
-
-			case NCCS:
-				FLAG = 0;
-
-				gte_ncc(cpu, VX0, VY0, VZ0);
-				break;
-
-			case CC: {
-				FLAG = 0;
-
-				const uint SHIFT_FRAC =
-					cpu_instr_shift_frac_get(
-						cpu->instr);
-
-				s64 sum = 0;
-				sum = gte_mac1_add(cpu, sum,
-						   (s64)((u64)RBK << 12));
-				sum = gte_mac1_add(cpu, sum, LR1 * IR1);
-				sum = gte_mac1_add(cpu, sum, LR2 * IR2);
-				sum = gte_mac1_add(cpu, sum, LR3 * IR3);
-				MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac2_add(cpu, sum,
-						   (s64)((u64)GBK << 12));
-				sum = gte_mac2_add(cpu, sum, LG1 * IR1);
-				sum = gte_mac2_add(cpu, sum, LG2 * IR2);
-				sum = gte_mac2_add(cpu, sum, LG3 * IR3);
-				MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac3_add(cpu, sum,
-						   (s64)((u64)BBK << 12));
-				sum = gte_mac3_add(cpu, sum, LB1 * IR1);
-				sum = gte_mac3_add(cpu, sum, LB2 * IR2);
-				sum = gte_mac3_add(cpu, sum, LB3 * IR3);
-				MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-				const bool lm = cpu->instr &
-						CPU_INSTR_LM_FLAG;
-
-				IR1 = gte_chk_ir1(cpu, MAC1, lm);
-				IR2 = gte_chk_ir2(cpu, MAC2, lm);
-				IR3 = gte_chk_ir3(cpu, MAC3, lm);
-
-				sum = 0;
-				sum = gte_mac1_add(cpu, sum,
-						   ((RGBC & 0xFF) * (u32)IR1)
-							   << 4);
-				MAC1 = (s32)sum;
-
-				sum = 0;
-				sum = gte_mac2_add(
-					cpu, sum,
-					(((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
-				MAC2 = (s32)sum;
-
-				sum = 0;
-				sum = gte_mac3_add(
-					cpu, sum,
-					(((RGBC >> 16) & 0xFF) * (u32)IR3)
-						<< 4);
-				MAC3 = (s32)sum;
-
-				sum = 0;
-				sum = gte_mac1_add(cpu, sum,
-						   MAC1 >> SHIFT_FRAC);
-				MAC1 = (s32)sum;
-
-				sum = 0;
-				sum = gte_mac2_add(cpu, sum,
-						   MAC2 >> SHIFT_FRAC);
-				MAC2 = (s32)sum;
-
-				sum = 0;
-				sum = gte_mac3_add(cpu, sum,
-						   MAC3 >> SHIFT_FRAC);
-				MAC3 = (s32)sum;
-
-				gte_rgb_push(cpu);
-				gte_flag_update(cpu);
-
-				break;
-			}
-
-			case NCS:
-				FLAG = 0;
-
-				gte_nc(cpu, VX0, VY0, VZ0);
-				break;
-
-			case NCT:
-				FLAG = 0;
-
-				gte_nc(cpu, VX0, VY0, VZ0);
-				gte_nc(cpu, VX1, VY1, VZ1);
-				gte_nc(cpu, VX2, VY2, VZ2);
-
-				break;
-
-			case SQR: {
-				FLAG = 0;
-
-				const uint SHIFT_FRAC =
-					cpu_instr_shift_frac_get(
-						cpu->instr);
-
-				s64 sum;
-
-				sum = gte_mac1_add(cpu, 0, IR1 * IR1);
-				MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = gte_mac2_add(cpu, 0, IR2 * IR2);
-				MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = gte_mac3_add(cpu, 0, IR3 * IR3);
-				MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-				IR1 = gte_chk_ir1(cpu, MAC1, true);
-				IR2 = gte_chk_ir2(cpu, MAC2, true);
-				IR3 = gte_chk_ir3(cpu, MAC3, true);
-
-				gte_flag_update(cpu);
-				break;
-			}
-
-			case DCPL: {
-				FLAG = 0;
-
-				s64 sum = gte_mac1_add(
-					cpu, 0,
-					((RGBC & 0xFF) * (u32)IR1) << 4);
-				MAC1 = (s32)sum;
-
-				sum = gte_mac2_add(
-					cpu, 0,
-					(((RGBC >> 8) & 0xFF) * (u32)IR2) << 4);
-				MAC2 = (s32)sum;
-
-				sum = gte_mac3_add(
-					cpu, 0,
-					(((RGBC >> 16) & 0xFF) * (u32)IR3)
-						<< 4);
-				MAC3 = (s32)sum;
-
-				gte_intpl_color(cpu);
-				gte_rgb_push(cpu);
-				gte_flag_update(cpu);
-
-				break;
-			}
-
-			case DPCT:
-				FLAG = 0;
-
-				gte_dpc(cpu, RGB0);
-				gte_dpc(cpu, RGB0);
-				gte_dpc(cpu, RGB0);
-
-				break;
-
-			case AVSZ3:
-				gte_avsz(cpu, ZSF3, 0, SZ1, SZ2, SZ3);
-				break;
-
-			case AVSZ4:
-				gte_avsz(cpu, ZSF4, SZ0, SZ1, SZ2, SZ3);
-				break;
-
-			case RTPT:
-				FLAG = 0;
-
-				gte_rtp(cpu, VX0, VY0, VZ0, false);
-				gte_rtp(cpu, VX1, VY1, VZ1, false);
-				gte_rtp(cpu, VX2, VY2, VZ2, true);
-
-				break;
-
-			case GPF:
-				MAC1 = 0;
-				MAC2 = 0;
-				MAC3 = 0;
-				FALLTHROUGH;
-
-			case GPL: {
-				FLAG = 0;
-
-				const uint SHIFT_FRAC =
-					cpu_instr_shift_frac_get(
-						cpu->instr);
-
-				s64 sum = 0;
-				sum = gte_mac1_add(cpu, sum, IR1 * IR0);
-				sum = gte_mac1_add(cpu, sum,
-						   (s64)((u64)MAC1
-							 << SHIFT_FRAC));
-				MAC1 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac2_add(cpu, sum, IR2 * IR0);
-				sum = gte_mac2_add(cpu, sum,
-						   (s64)((u64)MAC2
-							 << SHIFT_FRAC));
-				MAC2 = (s32)(sum >> SHIFT_FRAC);
-
-				sum = 0;
-				sum = gte_mac3_add(cpu, sum, IR3 * IR0);
-				sum = gte_mac3_add(cpu, sum,
-						   (s64)((u64)MAC3
-							 << SHIFT_FRAC));
-				MAC3 = (s32)(sum >> SHIFT_FRAC);
-
-				gte_rgb_push(cpu);
-				gte_flag_update(cpu);
-
-				break;
-			}
-
-			case NCCT:
-				FLAG = 0;
-
-				gte_ncc(cpu, VX0, VY0, VZ0);
-				gte_ncc(cpu, VX1, VY1, VZ1);
-				gte_ncc(cpu, VX2, VY2, VZ2);
-
-				break;
-
-			default:
-				EXC_RAISE(RI);
-				break;
-			}
-			break;
-		}
-		break;
-
-	case LB: {
-		const u32 paddr = paddr_get(cpu);
-		const s8 byte = (s8)bus_lb(cpu->bus, paddr);
-
-		load_delay(cpu, rt, (u32)byte);
-		break;
+	BRANCH_IF(cond_met);
+	goto end;
+
+op_j:
+	NPC = cpu_jmp_tgt_get(cpu->instr, cpu->pc);
+	goto end;
+
+op_jal:
+	GPR[ra] = PC + 8;
+	NPC = cpu_jmp_tgt_get(cpu->instr, cpu->pc);
+
+	goto end;
+
+op_beq:
+	BRANCH_IF(GPR[rs] == GPR[rt]);
+	goto end;
+
+op_bne:
+	BRANCH_IF(GPR[rs] != GPR[rt]);
+	goto end;
+
+op_blez:
+	BRANCH_IF((s32)GPR[rs] <= 0);
+	goto end;
+
+op_bgtz:
+	BRANCH_IF((s32)GPR[rs] > 0);
+	goto end;
+
+op_ori:
+	GPR[rt] = GPR[rs] | ZEXT_IMM;
+	goto end;
+
+op_xori:
+	GPR[rt] = GPR[rs] ^ ZEXT_IMM;
+	goto end;
+
+op_addi:
+	sum = GPR[rs] + SEXT_IMM;
+
+	if (ovf_add(GPR[rs], SEXT_IMM, sum)) {
+		EXC_RAISE(Ovf);
+		goto end;
+	}
+	GPR[rt] = sum;
+	goto end;
+
+op_addiu:
+	GPR[rt] = GPR[rs] + SEXT_IMM;
+	goto end;
+
+op_slti:
+	GPR[rt] = (s32)GPR[rs] < (s32)SEXT_IMM;
+	goto end;
+
+op_sltiu:
+	GPR[rt] = GPR[rs] < SEXT_IMM;
+	goto end;
+
+op_andi:
+	GPR[rt] = GPR[rs] & ZEXT_IMM;
+	goto end;
+
+op_lui:
+	GPR[rt] = ZEXT_IMM << 16;
+	goto end;
+
+cp0:
+	goto *cp0_tbl[rs];
+
+op_cp0_mf:
+	GPR[rt] = CP0_CPR[rd];
+	goto end;
+
+op_cp0_mt:
+	CP0_CPR[rd] = GPR[rt];
+	goto end;
+
+op_cp0_funct:
+	goto *cp0_instr_tbl[funct];
+
+op_rfe:
+	SR = (SR & 0xFFFFFFF0) | ((SR & 0x3C) >> 2);
+	goto end;
+
+cp2:
+	goto *cp2_tbl[rs];
+
+op_cp2_mf:
+	goto *cp2_mf_tbl[rd];
+
+cp2_mf_default:
+	GPR[rt] = CP2_CPR[rd];
+	goto end;
+
+cp2_mf_sext:
+	GPR[rt] = (u32)(s16)CP2_CPR[rd];
+	goto end;
+
+cp2_mf_sxyp:
+	GPR[rt] = (u32)SXY2;
+	goto end;
+
+cp2_mf_iorgb:
+	b = clamp(IR3 >> 7, 0x00, 0x1F) << 10;
+	g = clamp(IR2 >> 7, 0x00, 0x1F) << 5;
+	r = clamp(IR1 >> 7, 0x00, 0x1F);
+
+	GPR[rt] = (u32)(b | g | r);
+	goto end;
+
+op_cp2_cf:
+	goto *cp2_cf_tbl[rd];
+
+cp2_cf_default:
+	GPR[rt] = CP2_CCR[rd];
+	goto end;
+
+cp2_cf_zext:
+	GPR[rt] = (u32)(s16)CP2_CCR[rd];
+	goto end;
+
+op_cp2_mt:
+	goto *cp2_mt_tbl[rd];
+
+cp2_mt_default:
+	CP2_CPR[rd] = GPR[rt];
+	goto end;
+
+cp2_mt_irgb:
+	IR1 = (s16)((GPR[rt] & 0x1F) << 7);
+	IR2 = (s16)(((GPR[rt] >> 5) & 0x1F) << 7);
+	IR3 = (s16)(((GPR[rt] >> 10) & 0x1F) << 7);
+
+	goto end;
+
+cp2_mt_sxyp:
+	SXY0 = SXY1;
+	SXY1 = SXY2;
+	SXY2 = (s32)GPR[rt];
+
+	goto end;
+
+cp2_mt_sext:
+	CP2_CPR[rd] = (u32)(s16)GPR[rt];
+	goto end;
+
+cp2_mt_zext:
+	CP2_CPR[rd] = (u16)GPR[rt];
+	goto end;
+
+op_cp2_ct:
+	goto *cp2_ct_tbl[rd];
+
+cp2_ct_default:
+	CP2_CCR[rd] = GPR[rt];
+	goto end;
+
+cp2_ct_sext:
+	CP2_CCR[rd] = (u32)(s16)GPR[rt];
+	goto end;
+
+cp2_ct_flag:
+	FLAG = GPR[rt] & CPU_CP2_CCR_FLAG_MASK_WRITE;
+	gte_flag_update(cpu);
+
+	goto end;
+
+op_cp2_funct:
+	goto *cp2_instr_tbl[funct];
+
+op_rtps:
+	goto end;
+
+op_rtpt:
+	goto end;
+
+op_gpf:
+	goto end;
+
+op_gpl:
+	goto end;
+
+op_nclip:
+	goto end;
+
+op_op:
+	goto end;
+
+op_dpcs:
+	goto end;
+
+op_intpl:
+	goto end;
+
+op_mvmva:
+	goto end;
+
+op_nccs:
+	goto end;
+
+op_cc:
+	goto end;
+
+op_ncds:
+	goto end;
+
+op_cdp:
+	goto end;
+
+op_ncdt:
+	goto end;
+
+op_ncs:
+	goto end;
+
+op_nct:
+	goto end;
+
+op_sqr:
+	goto end;
+
+op_dcpl:
+	goto end;
+
+op_ncct:
+	goto end;
+
+op_dpct:
+	goto end;
+
+op_avsz3:
+	goto end;
+
+op_avsz4:
+	goto end;
+
+cp2_mf_lzcr:
+	if (LZCS > 0) {
+		GPR[rt] = (u32)__builtin_clz((uint)LZCS);
+	} else if (LZCS < 0) {
+		const uint n = (uint)~LZCS;
+		GPR[rt] = n ? (u32)__builtin_clz(n) : 32;
+	} else {
+		GPR[rt] = 32;
+	}
+	goto end;
+
+op_lb:
+	paddr = paddr_get(cpu);
+	sbyte = (s8)bus_lb(cpu->bus, paddr);
+
+	load_delay(cpu, rt, (u32)sbyte);
+	goto end;
+
+op_lh:
+	vaddr = vaddr_get(cpu);
+
+	if (unlikely((vaddr & 1) != 0)) {
+		EXC_RAISE(AdEL);
+		goto end;
 	}
 
-	case LH: {
-		const u32 vaddr = vaddr_get(cpu);
+	paddr = cpu_vaddr_to_paddr(vaddr);
+	signed_hword = (s16)bus_lh(cpu->bus, paddr);
 
-		if (unlikely((vaddr & 1) != 0)) {
-			EXC_RAISE(AdEL);
-			break;
-		}
+	load_delay(cpu, rt, (u32)signed_hword);
+	goto end;
 
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-		const s16 hword = (s16)bus_lh(cpu->bus, paddr);
+op_lwl:
+	paddr = paddr_get(cpu);
+	data = bus_lw(cpu->bus, paddr & (u32)~3);
 
-		load_delay(cpu, rt, (u32)hword);
-		break;
+	word = (LDS_NEXT.dst == rt) ? LDS_NEXT.val : GPR[rt];
+
+	shift = (paddr & 3) * 8;
+	mask = 0x00FFFFFF >> shift;
+
+	word = (word & mask) | (data << (24 - shift));
+
+	load_delay(cpu, rt, word);
+	goto end;
+
+op_lw:
+	vaddr = vaddr_get(cpu);
+
+	if (unlikely((vaddr & 3) != 0)) {
+		EXC_RAISE(AdEL);
+		goto end;
 	}
 
-	case LWL: {
-		const u32 paddr = paddr_get(cpu);
-		const u32 data = bus_lw(cpu->bus, paddr & (u32)~3);
+	paddr = cpu_vaddr_to_paddr(vaddr);
+	word = bus_lw(cpu->bus, paddr);
 
-		u32 word = (LDS_NEXT.dst == rt) ? LDS_NEXT.val : GPR[rt];
+	load_delay(cpu, rt, word);
+	goto end;
 
-		const uint shift = (paddr & 3) * 8;
-		const uint mask = 0x00FFFFFF >> shift;
+op_lbu:
+	paddr = paddr_get(cpu);
+	ubyte = bus_lb(cpu->bus, paddr);
 
-		word = (word & mask) | (data << (24 - shift));
+	load_delay(cpu, rt, ubyte);
+	goto end;
 
-		load_delay(cpu, rt, word);
-		break;
+op_lhu:
+	vaddr = vaddr_get(cpu);
+
+	if (unlikely((vaddr & 1) != 0)) {
+		EXC_RAISE(AdEL);
+		goto end;
+	}
+	paddr = cpu_vaddr_to_paddr(vaddr);
+	hword = bus_lh(cpu->bus, paddr);
+
+	load_delay(cpu, rt, hword);
+	goto end;
+
+op_lwr:
+	paddr = paddr_get(cpu);
+	data = bus_lw(cpu->bus, paddr & (u32)~3);
+
+	word = LDS_NEXT.dst == rt ? LDS_NEXT.val : GPR[rt];
+
+	shift = (paddr & 3) * 8;
+	mask = 0xFFFFFF00 << (24 - shift);
+
+	word = (word & mask) | (data >> shift);
+
+	load_delay(cpu, rt, word);
+	goto end;
+
+op_sb:
+	paddr = paddr_get(cpu);
+
+	bus_sb(cpu->bus, paddr, (u8)GPR[rt]);
+	goto end;
+
+op_sh:
+	vaddr = vaddr_get(cpu);
+
+	if (unlikely((vaddr & 1) != 0)) {
+		EXC_RAISE(AdES);
+		goto end;
+	}
+	paddr = cpu_vaddr_to_paddr(vaddr);
+	bus_sh(cpu->bus, paddr, (u16)GPR[rt]);
+
+	goto end;
+
+op_swl:
+	paddr = paddr_get(cpu);
+	aligned_paddr = paddr & (u32)~3;
+
+	word = bus_lw(cpu->bus, aligned_paddr);
+
+	shift = (paddr & 3) * 8;
+	mask = 0xFFFFFF00 << shift;
+
+	word = (word & mask) | (GPR[rt] >> (24 - shift));
+
+	bus_sw(cpu->bus, aligned_paddr, word);
+	goto end;
+
+op_sw:
+	if (SR & IsC) {
+		goto end;
 	}
 
-	case LW: {
-		const u32 vaddr = vaddr_get(cpu);
+	vaddr = vaddr_get(cpu);
 
-		if (unlikely((vaddr & 3) != 0)) {
-			EXC_RAISE(AdEL);
-			break;
-		}
-
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-		const u32 word = bus_lw(cpu->bus, paddr);
-
-		load_delay(cpu, rt, word);
-		break;
+	if (unlikely((vaddr & 3) != 0)) {
+		EXC_RAISE(AdES);
+		goto end;
 	}
 
-	case LBU: {
-		const u32 paddr = paddr_get(cpu);
-		const u8 byte = bus_lb(cpu->bus, paddr);
+	paddr = cpu_vaddr_to_paddr(vaddr);
 
-		load_delay(cpu, rt, byte);
-		break;
-	}
+	bus_sw(cpu->bus, paddr, GPR[rt]);
+	goto end;
 
-	case LHU: {
-		const u32 vaddr = vaddr_get(cpu);
+op_swr:
+	paddr = paddr_get(cpu);
+	aligned_paddr = paddr & (u32)~3;
 
-		if (unlikely((vaddr & 1) != 0)) {
-			EXC_RAISE(AdEL);
-			break;
-		}
+	word = bus_lw(cpu->bus, aligned_paddr);
 
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-		const u16 hword = bus_lh(cpu->bus, paddr);
+	shift = (paddr & 3) * 8;
+	mask = 0x00FFFFFF >> (24 - shift);
 
-		load_delay(cpu, rt, hword);
-		break;
-	}
+	word = (word & mask) | (GPR[rt] << shift);
 
-	case LWR: {
-		const u32 paddr = paddr_get(cpu);
-		const u32 data = bus_lw(cpu->bus, paddr & (u32)~3);
+	bus_sw(cpu->bus, aligned_paddr, word);
+	goto end;
 
-		u32 word = LDS_NEXT.dst == rt ? LDS_NEXT.val : GPR[rt];
+op_lwc2:
+	goto end;
 
-		const uint shift = (paddr & 3) * 8;
-		const uint mask = 0xFFFFFF00 << (24 - shift);
+op_swc2:
+	goto end;
 
-		word = (word & mask) | (data >> shift);
+illegal:
+	EXC_RAISE(RI);
+	goto end;
 
-		load_delay(cpu, rt, word);
-		break;
-	}
-
-	case SB: {
-		const u32 paddr = paddr_get(cpu);
-
-		bus_sb(cpu->bus, paddr, (u8)GPR[rt]);
-		break;
-	}
-
-	case SH: {
-		const u32 vaddr = vaddr_get(cpu);
-
-		if (unlikely((vaddr & 1) != 0)) {
-			EXC_RAISE(AdES);
-			break;
-		}
-
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-
-		bus_sh(cpu->bus, paddr, (u16)GPR[rt]);
-		break;
-	}
-
-	case SWL: {
-		const u32 paddr = paddr_get(cpu);
-		const u32 aligned_paddr = paddr & (u32)~3;
-
-		u32 word = bus_lw(cpu->bus, aligned_paddr);
-
-		const uint shift = (paddr & 3) * 8;
-		const uint mask = 0xFFFFFF00 << shift;
-
-		word = (word & mask) | (GPR[rt] >> (24 - shift));
-
-		bus_sw(cpu->bus, aligned_paddr, word);
-		break;
-	}
-
-	case SW: {
-		if (SR & IsC) {
-			break;
-		}
-
-		const u32 vaddr = vaddr_get(cpu);
-
-		if (unlikely((vaddr & 3) != 0)) {
-			EXC_RAISE(AdES);
-			break;
-		}
-
-		const u32 paddr = cpu_vaddr_to_paddr(vaddr);
-
-		bus_sw(cpu->bus, paddr, GPR[rt]);
-		break;
-	}
-
-	case SWR: {
-		const u32 paddr = paddr_get(cpu);
-		const u32 aligned_paddr = paddr & (u32)~3;
-
-		u32 word = bus_lw(cpu->bus, aligned_paddr);
-
-		const uint shift = (paddr & 3) * 8;
-		const uint mask = 0x00FFFFFF >> (24 - shift);
-
-		word = (word & mask) | (GPR[rt] << shift);
-
-		bus_sw(cpu->bus, aligned_paddr, word);
-		break;
-	}
-
-	default:
-		EXC_RAISE(RI);
-		break;
-	}
+end:
 	GPR[zero] = 0;
 	PC += sizeof(u32);
 	cpu->instr = instr_fetch(cpu);
