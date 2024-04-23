@@ -144,10 +144,10 @@
 #define IR3	(cpu->cp2.cpr.IR3)
 #define LZCR	(cpu->cp2.cpr.LZCR)
 #define LZCS	(cpu->cp2.cpr.LZCS)
-#define MAC0	(cpu->cp2.cpr.MAC0)
-#define MAC1	(cpu->cp2.cpr.MAC1)
-#define MAC2	(cpu->cp2.cpr.MAC2)
-#define MAC3	(cpu->cp2.cpr.MAC3)
+#define MAC0	(cpu->cp2.MAC0)
+#define MAC1	(cpu->cp2.MAC1)
+#define MAC2	(cpu->cp2.MAC2)
+#define MAC3	(cpu->cp2.MAC3)
 #define OTZ	(cpu->cp2.cpr.OTZ)
 #define RGB0	(cpu->cp2.cpr.RGB0)
 #define RGB1	(cpu->cp2.cpr.RGB1)
@@ -166,6 +166,8 @@
 #define SZ1	(cpu->cp2.cpr.SZ1)
 #define SZ2	(cpu->cp2.cpr.SZ2)
 #define SZ3	(cpu->cp2.cpr.SZ3)
+#define V	(cpu->cp2.cpr.V)
+#define V0	(V[0])
 #define VX0	((s16)(VXY0 & 0xFFFF))
 #define VX1	((s16)(VXY1 & 0xFFFF))
 #define VX2	((s16)(VXY2 & 0xFFFF))
@@ -225,6 +227,7 @@
 #define R31R32	(cpu->cp2.ccr.R31R32)
 #define RBK	(cpu->cp2.ccr.RBK)
 #define RFC	(cpu->cp2.ccr.RFC)
+#define RT	(cpu->cp2.ccr.RT)
 #define RT11	(D1)
 #define RT12	((s16)(R11R12 >> 16))
 #define RT13	((s16)(R13R21 & 0xFFFF))
@@ -234,9 +237,7 @@
 #define RT31	((s16)(R31R32 & 0xFFFF))
 #define RT32	((s16)(R31R32 >> 16))
 #define RT33	(cpu->cp2.ccr.R33)
-#define TRX	(cpu->cp2.ccr.TRX)
-#define TRY	(cpu->cp2.ccr.TRY)
-#define TRZ	(cpu->cp2.ccr.TRZ)
+#define TR	(cpu->cp2.ccr.TR)
 #define ZSF3	(cpu->cp2.ccr.ZSF3)
 #define ZSF4	(cpu->cp2.ccr.ZSF4)
 
@@ -249,8 +250,6 @@
 
 #define EXC_RAISE(exc_code)	(exc_raise(cpu, (exc_code)))
 #define BRANCH_IF(cond)		(branch_if(cpu, (cond)))
-
-#define JMP_TGT (cpu_jmp_tgt_get(cpu->instr, PC))
 
 #define LDS_NEXT	(cpu->lds_next)
 #define LDS_PEND	(cpu->lds_pend)
@@ -274,6 +273,228 @@ static ALWAYS_INLINE void gte_flag_update(struct psycho_cpu *const cpu)
 	if (FLAG & CPU_CP2_CCR_FLAG_MASK_ERR) {
 		FLAG |= CPU_CP2_CCR_FLAG_ERR;
 	}
+}
+
+static ALWAYS_INLINE s16 gte_chk_sxy(struct psycho_cpu *const cpu,
+				     const s32 value, const uint flag)
+{
+	if (value < CPU_CP2_CPR_SXY2_MIN) {
+		FLAG |= flag;
+		return CPU_CP2_CPR_SXY2_MIN;
+	}
+
+	if (value > CPU_CP2_CPR_SXY2_MAX) {
+		FLAG |= flag;
+		return CPU_CP2_CPR_SXY2_MAX;
+	}
+	return (s16)value;
+}
+
+static ALWAYS_INLINE s16 gte_chk_sx2(struct psycho_cpu *const cpu,
+				     const s32 value)
+{
+	return gte_chk_sxy(cpu, value, CPU_CP2_CCR_FLAG_SX2_SATURATED);
+}
+
+static ALWAYS_INLINE s16 gte_chk_sy2(struct psycho_cpu *const cpu,
+				     const s32 value)
+{
+	return gte_chk_sxy(cpu, value, CPU_CP2_CCR_FLAG_SY2_SATURATED);
+}
+
+static ALWAYS_INLINE u16 gte_chk_sz3_otz(struct psycho_cpu *const cpu,
+					 const s32 value)
+{
+	if (value < CPU_CP2_CPR_SZ3_OTZ_MIN) {
+		FLAG |= CPU_CP2_CCR_FLAG_SZ3_OR_OTZ_SATURATED;
+		return CPU_CP2_CPR_SZ3_OTZ_MIN;
+	}
+
+	if (value > CPU_CP2_CPR_SZ3_OTZ_MAX) {
+		FLAG |= CPU_CP2_CCR_FLAG_SZ3_OR_OTZ_SATURATED;
+		return CPU_CP2_CPR_SZ3_OTZ_MAX;
+	}
+	return (u16)value;
+}
+
+static ALWAYS_INLINE s16 gte_chk_ir123(struct psycho_cpu *const cpu,
+				       const s64 value, const uint flag,
+				       const bool lm)
+{
+	const s16 min = lm ? CPU_CP2_CPR_IR123_LM_MIN : CPU_CP2_CPR_IR123_MIN;
+
+	if (value < min) {
+		FLAG |= flag;
+		return min;
+	}
+
+	if (value > CPU_CP2_CPR_IR123_MAX) {
+		FLAG |= flag;
+		return CPU_CP2_CPR_IR123_MAX;
+	}
+	return (s16)value;
+}
+
+static ALWAYS_INLINE s16 gte_chk_ir0(struct psycho_cpu *const cpu,
+				     const s32 value)
+{
+	if (value < CPU_CP2_CPR_IR0_MIN) {
+		FLAG |= CPU_CP2_CCR_FLAG_IR0_SATURATED;
+		return CPU_CP2_CPR_IR0_MIN;
+	}
+
+	if (value > CPU_CP2_CPR_IR0_MAX) {
+		FLAG |= CPU_CP2_CCR_FLAG_IR0_SATURATED;
+		return CPU_CP2_CPR_IR0_MAX;
+	}
+	return (s16)value;
+}
+
+static ALWAYS_INLINE s16 gte_chk_ir1(struct psycho_cpu *const cpu,
+				     const s64 value, const bool lm)
+{
+	return gte_chk_ir123(cpu, value, CPU_CP2_CCR_FLAG_IR1_SATURATED, lm);
+}
+
+static ALWAYS_INLINE s16 gte_chk_ir2(struct psycho_cpu *const cpu,
+				     const s64 value, const bool lm)
+{
+	return gte_chk_ir123(cpu, value, CPU_CP2_CCR_FLAG_IR2_SATURATED, lm);
+}
+
+static ALWAYS_INLINE s16 gte_chk_ir3(struct psycho_cpu *const cpu,
+				     const s64 value, const bool lm)
+{
+	return gte_chk_ir123(cpu, value, CPU_CP2_CCR_FLAG_IR3_SATURATED, lm);
+}
+
+static ALWAYS_INLINE void gte_ovf_chk(struct psycho_cpu *const cpu,
+				      const s64 sum, const s64 min,
+				      const s64 max, const uint neg_flag,
+				      const uint pos_flag)
+{
+	if (sum > max) {
+		FLAG |= pos_flag;
+	} else if (sum < min) {
+		FLAG |= neg_flag;
+	}
+}
+
+static ALWAYS_INLINE NODISCARD s64 gte_mac123_add(struct psycho_cpu *const cpu,
+						  const s64 mac,
+						  const s64 addend,
+						  const uint neg_flag,
+						  const uint pos_flag)
+{
+	const s64 sum = mac + addend;
+
+	gte_ovf_chk(cpu, sum, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
+		    neg_flag, pos_flag);
+
+	// Sign-extend result to 44 bits (64-20 = 44).
+	return (s64)((u64)sum << 20) >> 20;
+}
+
+static ALWAYS_INLINE NODISCARD s64 gte_mac0_add(struct psycho_cpu *const cpu,
+						const s64 sum)
+{
+	gte_ovf_chk(cpu, sum, CPU_CP2_CPR_MAC0_MIN, CPU_CP2_CPR_MAC0_MAX,
+		    CPU_CP2_CCR_FLAG_MAC0_NEG_OVF,
+		    CPU_CP2_CCR_FLAG_MAC0_POS_OVF);
+
+	// Sign extend result to 32 bits (64-32 = 32).
+	return (s64)((u64)sum << 32) >> 32;
+}
+
+static NODISCARD s64 gte_mac1_add(struct psycho_cpu *const cpu,
+				  const s64 addend)
+{
+	return gte_mac123_add(cpu, MAC1, addend, CPU_CP2_CCR_FLAG_MAC1_NEG_OVF,
+			      CPU_CP2_CCR_FLAG_MAC1_POS_OVF);
+}
+
+static NODISCARD s64 gte_mac2_add(struct psycho_cpu *const cpu,
+				  const s64 addend)
+{
+	return gte_mac123_add(cpu, MAC2, addend, CPU_CP2_CCR_FLAG_MAC2_NEG_OVF,
+			      CPU_CP2_CCR_FLAG_MAC2_POS_OVF);
+}
+
+static NODISCARD s64 gte_mac3_add(struct psycho_cpu *const cpu,
+				  const s64 addend)
+{
+	return gte_mac123_add(cpu, MAC3, addend, CPU_CP2_CCR_FLAG_MAC3_NEG_OVF,
+			      CPU_CP2_CCR_FLAG_MAC3_POS_OVF);
+}
+
+static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
+		       const s16 v1[3][3], const s16 v2[3][4])
+{
+	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
+
+#define iter(n)                                                              \
+	({                                                                   \
+		MAC##n = 0;                                                  \
+		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)v0[n - 1] << 12)); \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * v2[n - 1][0]); \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * v2[n - 1][1]); \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * v2[n - 1][2]); \
+		MAC##n >>= sf;                                               \
+	})
+
+	iter(1);
+	iter(2);
+	iter(3);
+#undef iter
+}
+
+static void gte_rtp(struct psycho_cpu *const cpu, const s16 vec[3][4])
+{
+	gte_matmul(cpu, TR, RT, vec);
+
+	SZ0 = SZ1;
+	SZ1 = SZ2;
+	SZ2 = SZ3;
+	SZ3 = gte_chk_sz3_otz(cpu, (s32)MAC3);
+
+	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
+	IR1 = gte_chk_ir1(cpu, (s32)MAC1, lm);
+	IR2 = gte_chk_ir2(cpu, (s32)MAC2, lm);
+	IR3 = gte_chk_ir3(cpu, (s32)MAC3, false);
+	IR3 = (s16)clamp((s32)MAC3,
+			 lm ? CPU_CP2_CPR_IR123_LM_MIN : CPU_CP2_CPR_IR123_MIN,
+			 CPU_CP2_CPR_IR123_MAX);
+
+	s64 quot;
+
+	if (H < (SZ3 * 2)) {
+		const int i = SZ3 ? __builtin_clz(SZ3) - 16 : 16;
+		quot = H << i;
+		s64 d = SZ3 << i;
+		s64 n = (d - 0x7FC0) >> 7;
+		const s64 u = (0x40000 / (n + 0x100) + 1) / 2 - 0x101;
+		d = (0x2000080 - (d * u)) >> 8;
+		d = (0x0000080 + (d * u)) >> 8;
+		quot = min(0x1FFFF, ((quot * d) + 0x8000) >> 16);
+	} else {
+		quot = 0x1FFFF;
+		FLAG |= CPU_CP2_CCR_FLAG_DIV_OVF;
+	}
+
+	MAC0 = gte_mac0_add(cpu, (quot * IR1) + OFX);
+	const s16 sx = gte_chk_sx2(cpu, (s32)(MAC0 >> 16));
+
+	MAC0 = gte_mac0_add(cpu, (quot * IR2) + OFY);
+	const s16 sy = gte_chk_sy2(cpu, (s32)(MAC0 >> 16));
+
+	SXY0 = SXY1;
+	SXY1 = SXY2;
+	SXY2 = (s32)(((u32)sx & 0xFFFF) | ((u32)sy << 16));
+
+	MAC0 = gte_mac0_add(cpu, (quot * DQA) + DQB);
+	IR0 = gte_chk_ir0(cpu, (s32)MAC0);
+
+	gte_flag_update(cpu);
 }
 
 /// @brief Branches to the target address if a condition was met.
@@ -639,7 +860,11 @@ void cpu_step(struct psycho_cpu *const cpu)
 		[CPU_CP2_CPR_IR0 ... CPU_CP2_CPR_IR3]	= &&cp2_mf_sext,
 		[CPU_CP2_CPR_SXY0 ... CPU_CP2_CPR_SXY2]	= &&cp2_mf_default,
 		[CPU_CP2_CPR_SXYP]			= &&cp2_mf_sxyp,
-		[CPU_CP2_CPR_SZ0 ... CPU_CP2_CPR_MAC3]	= &&cp2_mf_default,
+		[CPU_CP2_CPR_SZ0 ... CPU_CP2_CPR_RES1]	= &&cp2_mf_default,
+		[CPU_CP2_CPR_MAC0]			= &&cp2_mf_mac0,
+		[CPU_CP2_CPR_MAC1]			= &&cp2_mf_mac1,
+		[CPU_CP2_CPR_MAC2]			= &&cp2_mf_mac2,
+		[CPU_CP2_CPR_MAC3]			= &&cp2_mf_mac3,
 		[CPU_CP2_CPR_IRGB ... CPU_CP2_CPR_ORGB]	= &&cp2_mf_iorgb,
 		[CPU_CP2_CPR_LZCS]			= &&cp2_mf_default,
 		[CPU_CP2_CPR_LZCR]			= &&cp2_mf_lzcr
@@ -664,7 +889,11 @@ void cpu_step(struct psycho_cpu *const cpu)
 		[CPU_CP2_CPR_IR1 ... CPU_CP2_CPR_SXY2]	= &&cp2_mt_default,
 		[CPU_CP2_CPR_SXYP]			= &&cp2_mt_sxyp,
 		[CPU_CP2_CPR_SZ0 ... CPU_CP2_CPR_SZ3]	= &&cp2_mt_zext,
-		[CPU_CP2_CPR_RGB0 ... CPU_CP2_CPR_MAC3]	= &&cp2_mt_default,
+		[CPU_CP2_CPR_RGB0 ... CPU_CP2_CPR_RES1]	= &&cp2_mt_default,
+		[CPU_CP2_CPR_MAC0]			= &&cp2_mt_mac0,
+		[CPU_CP2_CPR_MAC1]			= &&cp2_mt_mac1,
+		[CPU_CP2_CPR_MAC2]			= &&cp2_mt_mac2,
+		[CPU_CP2_CPR_MAC3]			= &&cp2_mt_mac3,
 		[CPU_CP2_CPR_IRGB]			= &&cp2_mt_irgb,
 		[CPU_CP2_CPR_ORGB ... CPU_CP2_CPR_LZCR]	= &&cp2_mt_default
 	};
@@ -973,6 +1202,22 @@ cp2_mf_sxyp:
 	GPR[rt] = (u32)SXY2;
 	goto end;
 
+cp2_mf_mac0:
+	GPR[rt] = (u32)(s32)MAC0;
+	goto end;
+
+cp2_mf_mac1:
+	GPR[rt] = (u32)(s32)MAC1;
+	goto end;
+
+cp2_mf_mac2:
+	GPR[rt] = (u32)(s32)MAC2;
+	goto end;
+
+cp2_mf_mac3:
+	GPR[rt] = (u32)(s32)MAC3;
+	goto end;
+
 cp2_mf_iorgb:
 	b = clamp(IR3 >> 7, 0x00, 0x1F) << 10;
 	g = clamp(IR2 >> 7, 0x00, 0x1F) << 5;
@@ -1004,6 +1249,22 @@ cp2_mt_irgb:
 	IR2 = (s16)(((GPR[rt] >> 5) & 0x1F) << 7);
 	IR3 = (s16)(((GPR[rt] >> 10) & 0x1F) << 7);
 
+	goto end;
+
+cp2_mt_mac0:
+	MAC0 = (s32)GPR[rt];
+	goto end;
+
+cp2_mt_mac1:
+	MAC1 = (s32)GPR[rt];
+	goto end;
+
+cp2_mt_mac2:
+	MAC2 = (s32)GPR[rt];
+	goto end;
+
+cp2_mt_mac3:
+	MAC3 = (s32)GPR[rt];
 	goto end;
 
 cp2_mt_sxyp:
@@ -1042,6 +1303,9 @@ op_cp2_funct:
 	goto *cp2_instr_tbl[funct];
 
 op_rtps:
+	FLAG = 0;
+
+	gte_rtp(cpu, &V0);
 	goto end;
 
 op_rtpt:

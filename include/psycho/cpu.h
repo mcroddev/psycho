@@ -58,12 +58,7 @@ struct psycho_cpu {
 		/// @brief Data registers.
 		union {
 			struct {
-				s32 VXY0; // 0
-				s16 VZ0; // 1
-				s32 VXY1; // 2
-				s16 VZ1; // 3
-				s32 VXY2; // 4
-				s16 VZ2; // 5
+				s16 V[3][4];
 				u32 RGBC; // 6
 				u16 OTZ; // 7
 				u16 pad0;
@@ -105,14 +100,8 @@ struct psycho_cpu {
 		/// @brief Control registers.
 		union {
 			struct {
-				s32 R11R12; // 0
-				s32 R13R21; // 1
-				s32 R22R23; // 2
-				s32 R31R32; // 3
-				s16 R33; // 4
-				s32 TRX; // 5
-				s32 TRY; // 6
-				s32 TRZ; // 7
+				s16 RT[3][3];
+				s32 TR[3];
 				s32 L11L12; // 8
 				s32 L13L21; // 9
 				s32 L22L23; // 10
@@ -142,6 +131,11 @@ struct psycho_cpu {
 			};
 			u32 regs[PSYCHO_CPU_CP2_CCR_REGS_NUM];
 		} ccr;
+
+		s64 MAC0;
+		s64 MAC1;
+		s64 MAC2;
+		s64 MAC3;
 	} cp2;
 
 	struct {
