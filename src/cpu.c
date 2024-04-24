@@ -428,7 +428,7 @@ static NODISCARD s64 gte_mac3_add(struct psycho_cpu *const cpu,
 }
 
 static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
-		       const s16 v1[3][3], const s16 v2[3][4])
+		       const s16 v1[3][3], const s16 *const v2)
 {
 	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
 
@@ -436,9 +436,9 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 	({                                                                   \
 		MAC##n = 0;                                                  \
 		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)v0[n - 1] << 12)); \
-		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * v2[n - 1][0]); \
-		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * v2[n - 1][1]); \
-		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * v2[n - 1][2]); \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * v2[0]);        \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * v2[1]);        \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * v2[2]);        \
 		MAC##n >>= sf;                                               \
 	})
 
@@ -448,7 +448,7 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 #undef iter
 }
 
-static void gte_rtp(struct psycho_cpu *const cpu, const s16 vec[3][4])
+static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 {
 	gte_matmul(cpu, TR, RT, vec);
 
@@ -1305,7 +1305,7 @@ op_cp2_funct:
 op_rtps:
 	FLAG = 0;
 
-	gte_rtp(cpu, &V0);
+	gte_rtp(cpu, V0);
 	goto end;
 
 op_rtpt:
