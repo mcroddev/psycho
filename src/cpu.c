@@ -276,7 +276,7 @@ static ALWAYS_INLINE void gte_flag_update(struct psycho_cpu *const cpu)
 }
 
 static ALWAYS_INLINE s16 gte_chk_sxy(struct psycho_cpu *const cpu,
-				     const s32 value, const uint flag)
+				     const s64 value, const uint flag)
 {
 	if (value < CPU_CP2_CPR_SXY2_MIN) {
 		FLAG |= flag;
@@ -291,19 +291,19 @@ static ALWAYS_INLINE s16 gte_chk_sxy(struct psycho_cpu *const cpu,
 }
 
 static ALWAYS_INLINE s16 gte_chk_sx2(struct psycho_cpu *const cpu,
-				     const s32 value)
+				     const s64 value)
 {
 	return gte_chk_sxy(cpu, value, CPU_CP2_CCR_FLAG_SX2_SATURATED);
 }
 
 static ALWAYS_INLINE s16 gte_chk_sy2(struct psycho_cpu *const cpu,
-				     const s32 value)
+				     const s64 value)
 {
 	return gte_chk_sxy(cpu, value, CPU_CP2_CCR_FLAG_SY2_SATURATED);
 }
 
 static ALWAYS_INLINE u16 gte_chk_sz3_otz(struct psycho_cpu *const cpu,
-					 const s32 value)
+					 const s64 value)
 {
 	if (value < CPU_CP2_CPR_SZ3_OTZ_MIN) {
 		FLAG |= CPU_CP2_CCR_FLAG_SZ3_OR_OTZ_SATURATED;
@@ -336,7 +336,7 @@ static ALWAYS_INLINE s16 gte_chk_ir123(struct psycho_cpu *const cpu,
 }
 
 static ALWAYS_INLINE s16 gte_chk_ir0(struct psycho_cpu *const cpu,
-				     const s32 value)
+				     const s64 value)
 {
 	if (value < CPU_CP2_CPR_IR0_MIN) {
 		FLAG |= CPU_CP2_CCR_FLAG_IR0_SATURATED;
@@ -402,8 +402,7 @@ static ALWAYS_INLINE NODISCARD s64 gte_mac0_add(struct psycho_cpu *const cpu,
 		    CPU_CP2_CCR_FLAG_MAC0_NEG_OVF,
 		    CPU_CP2_CCR_FLAG_MAC0_POS_OVF);
 
-	// Sign extend result to 32 bits (64-32 = 32).
-	return (s64)((u64)sum << 32) >> 32;
+	return sum;
 }
 
 static NODISCARD s64 gte_mac1_add(struct psycho_cpu *const cpu,
@@ -430,8 +429,6 @@ static NODISCARD s64 gte_mac3_add(struct psycho_cpu *const cpu,
 static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 		       const s16 v1[3][3], const s16 *const v2)
 {
-	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
-
 #define iter(n)                                                              \
 	({                                                                   \
 		MAC##n = 0;                                                  \
@@ -439,7 +436,6 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * v2[0]);        \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * v2[1]);        \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * v2[2]);        \
-		MAC##n >>= sf;                                               \
 	})
 
 	iter(1);
@@ -450,17 +446,53 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 
 static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 {
+	static const u8 unr_table[] = {
+		0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE,
+		0xEC, 0xEA, 0xE8, 0xE6, 0xE4, 0xE3, 0xE1, 0xDF, 0xDD, 0xDC,
+		0xDA, 0xD8, 0xD6, 0xD5, 0xD3, 0xD1, 0xD0, 0xCE, 0xCD, 0xCB,
+		0xC9, 0xC8, 0xC6, 0xC5, 0xC3, 0xC1, 0xC0, 0xBE, 0xBD, 0xBB,
+		0xBA, 0xB8, 0xB7, 0xB5, 0xB4, 0xB2, 0xB1, 0xB0, 0xAE, 0xAD,
+		0xAB, 0xAA, 0xA9, 0xA7, 0xA6, 0xA4, 0xA3, 0xA2, 0xA0, 0x9F,
+		0x9E, 0x9C, 0x9B, 0x9A, 0x99, 0x97, 0x96, 0x95, 0x94, 0x92,
+		0x91, 0x90, 0x8F, 0x8D, 0x8C, 0x8B, 0x8A, 0x89, 0x87, 0x86,
+		0x85, 0x84, 0x83, 0x82, 0x81, 0x7F, 0x7E, 0x7D, 0x7C, 0x7B,
+		0x7A, 0x79, 0x78, 0x77, 0x75, 0x74, 0x73, 0x72, 0x71, 0x70,
+		0x6F, 0x6E, 0x6D, 0x6C, 0x6B, 0x6A, 0x69, 0x68, 0x67, 0x66,
+		0x65, 0x64, 0x63, 0x62, 0x61, 0x60, 0x5F, 0x5E, 0x5D, 0x5D,
+		0x5C, 0x5B, 0x5A, 0x59, 0x58, 0x57, 0x56, 0x55, 0x54, 0x53,
+		0x53, 0x52, 0x51, 0x50, 0x4F, 0x4E, 0x4D, 0x4D, 0x4C, 0x4B,
+		0x4A, 0x49, 0x48, 0x48, 0x47, 0x46, 0x45, 0x44, 0x43, 0x43,
+		0x42, 0x41, 0x40, 0x3F, 0x3F, 0x3E, 0x3D, 0x3C, 0x3C, 0x3B,
+		0x3A, 0x39, 0x39, 0x38, 0x37, 0x36, 0x36, 0x35, 0x34, 0x33,
+		0x33, 0x32, 0x31, 0x31, 0x30, 0x2F, 0x2E, 0x2E, 0x2D, 0x2C,
+		0x2C, 0x2B, 0x2A, 0x2A, 0x29, 0x28, 0x28, 0x27, 0x26, 0x26,
+		0x25, 0x24, 0x24, 0x23, 0x22, 0x22, 0x21, 0x20, 0x20, 0x1F,
+		0x1E, 0x1E, 0x1D, 0x1D, 0x1C, 0x1B, 0x1B, 0x1A, 0x19, 0x19,
+		0x18, 0x18, 0x17, 0x16, 0x16, 0x15, 0x15, 0x14, 0x14, 0x13,
+		0x12, 0x12, 0x11, 0x11, 0x10, 0x0F, 0x0F, 0x0E, 0x0E, 0x0D,
+		0x0D, 0x0C, 0x0C, 0x0B, 0x0A, 0x0A, 0x09, 0x09, 0x08, 0x08,
+		0x07, 0x07, 0x06, 0x06, 0x05, 0x05, 0x04, 0x04, 0x03, 0x03,
+		0x02, 0x02, 0x01, 0x01, 0x00, 0x00, 0x00
+	};
+
+	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
+
 	gte_matmul(cpu, TR, RT, vec);
+	MAC1 >>= sf;
+	MAC2 >>= sf;
 
 	SZ0 = SZ1;
 	SZ1 = SZ2;
 	SZ2 = SZ3;
-	SZ3 = gte_chk_sz3_otz(cpu, (s32)MAC3);
+	SZ3 = gte_chk_sz3_otz(cpu, MAC3);
 
 	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
 	IR1 = gte_chk_ir1(cpu, (s32)MAC1, lm);
 	IR2 = gte_chk_ir2(cpu, (s32)MAC2, lm);
-	IR3 = gte_chk_ir3(cpu, (s32)MAC3, false);
+	IR3 = gte_chk_ir3(cpu, (s32)(MAC3 >> 12), false);
+
+	MAC3 >>= sf;
+
 	IR3 = (s16)clamp((s32)MAC3,
 			 lm ? CPU_CP2_CPR_IR123_LM_MIN : CPU_CP2_CPR_IR123_MIN,
 			 CPU_CP2_CPR_IR123_MAX);
@@ -471,8 +503,7 @@ static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 		const int i = SZ3 ? __builtin_clz(SZ3) - 16 : 16;
 		quot = H << i;
 		s64 d = SZ3 << i;
-		s64 n = (d - 0x7FC0) >> 7;
-		const s64 u = (0x40000 / (n + 0x100) + 1) / 2 - 0x101;
+		const uint u = unr_table[(d - 0x7FC0) >> 7] + 0x101;
 		d = (0x2000080 - (d * u)) >> 8;
 		d = (0x0000080 + (d * u)) >> 8;
 		quot = min(0x1FFFF, ((quot * d) + 0x8000) >> 16);
@@ -482,17 +513,17 @@ static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 	}
 
 	MAC0 = gte_mac0_add(cpu, (quot * IR1) + OFX);
-	const s16 sx = gte_chk_sx2(cpu, (s32)(MAC0 >> 16));
+	const s16 sx = gte_chk_sx2(cpu, MAC0 >> 16);
 
 	MAC0 = gte_mac0_add(cpu, (quot * IR2) + OFY);
-	const s16 sy = gte_chk_sy2(cpu, (s32)(MAC0 >> 16));
+	const s16 sy = gte_chk_sy2(cpu, MAC0 >> 16);
 
 	SXY0 = SXY1;
 	SXY1 = SXY2;
 	SXY2 = (s32)(((u32)sx & 0xFFFF) | ((u32)sy << 16));
 
 	MAC0 = gte_mac0_add(cpu, (quot * DQA) + DQB);
-	IR0 = gte_chk_ir0(cpu, (s32)MAC0);
+	IR0 = gte_chk_ir0(cpu, MAC0 >> 12);
 
 	gte_flag_update(cpu);
 }
