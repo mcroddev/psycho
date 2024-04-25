@@ -59,7 +59,7 @@ struct psycho_cpu {
 		union {
 			struct {
 				s16 V[3][4];
-				u32 RGBC; // 6
+				u8 RGBC[4];
 				u16 OTZ; // 7
 				u16 pad0;
 				s16 IR0; // 8

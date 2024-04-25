@@ -184,9 +184,9 @@
 #define CP2_CCR	(cpu->cp2.ccr.regs)
 #define BBK	(cpu->cp2.ccr.BBK)
 #define BFC	(cpu->cp2.ccr.BFC)
-#define D1	((s16)(R11R12 & 0xFFFF))
-#define D2	((s16)(R22R23 & 0xFFFF))
-#define D3	(RT33)
+#define D1	(RT[0][0])
+#define D2	(RT[1][1])
+#define D3	(RT[2][2])
 #define DQA	(cpu->cp2.ccr.DQA)
 #define DQB	(cpu->cp2.ccr.DQB)
 #define FLAG	(cpu->cp2.ccr.FLAG)
@@ -426,6 +426,33 @@ static NODISCARD s64 gte_mac3_add(struct psycho_cpu *const cpu,
 			      CPU_CP2_CCR_FLAG_MAC3_POS_OVF);
 }
 
+static NODISCARD ALWAYS_INLINE s64 gte_mac1_chk(struct psycho_cpu *const cpu,
+						const s64 sum)
+{
+	gte_ovf_chk(cpu, sum, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
+		    CPU_CP2_CCR_FLAG_MAC1_NEG_OVF,
+		    CPU_CP2_CCR_FLAG_MAC1_POS_OVF);
+	return sum;
+}
+
+static NODISCARD ALWAYS_INLINE s64 gte_mac2_chk(struct psycho_cpu *const cpu,
+						const s64 sum)
+{
+	gte_ovf_chk(cpu, sum, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
+		    CPU_CP2_CCR_FLAG_MAC2_NEG_OVF,
+		    CPU_CP2_CCR_FLAG_MAC2_POS_OVF);
+	return sum;
+}
+
+static NODISCARD ALWAYS_INLINE s64 gte_mac3_chk(struct psycho_cpu *const cpu,
+						const s64 sum)
+{
+	gte_ovf_chk(cpu, sum, CPU_CP2_CPR_MAC123_MIN, CPU_CP2_CPR_MAC123_MAX,
+		    CPU_CP2_CCR_FLAG_MAC3_NEG_OVF,
+		    CPU_CP2_CCR_FLAG_MAC3_POS_OVF);
+	return sum;
+}
+
 static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 		       const s16 v1[3][3], const s16 *const v2)
 {
@@ -446,6 +473,7 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 
 static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 {
+	// XXX: This LUT is inefficient.
 	static const u8 unr_table[] = {
 		0xFF, 0xFD, 0xFB, 0xF9, 0xF7, 0xF5, 0xF3, 0xF1, 0xEF, 0xEE,
 		0xEC, 0xEA, 0xE8, 0xE6, 0xE4, 0xE3, 0xE1, 0xDF, 0xDD, 0xDC,
@@ -525,6 +553,88 @@ static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 	MAC0 = gte_mac0_add(cpu, (quot * DQA) + DQB);
 	IR0 = gte_chk_ir0(cpu, MAC0 >> 12);
 
+	gte_flag_update(cpu);
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb(struct psycho_cpu *const cpu,
+				     const s32 value, const uint flag)
+{
+	if (value < CPU_CP2_CPR_RGB_MIN) {
+		FLAG |= flag;
+		return CPU_CP2_CPR_RGB_MIN;
+	}
+
+	if (value > CPU_CP2_CPR_RGB_MAX) {
+		FLAG |= flag;
+		return CPU_CP2_CPR_RGB_MAX;
+	}
+	return (u32)(u8)value;
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb_r(struct psycho_cpu *const cpu,
+				       const s32 value)
+{
+	return gte_chk_rgb(cpu, value, CPU_CP2_CCR_FLAG_RGB_R_SATURATED);
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb_g(struct psycho_cpu *const cpu,
+				       const s32 value)
+{
+	return gte_chk_rgb(cpu, value, CPU_CP2_CCR_FLAG_RGB_G_SATURATED);
+}
+
+static ALWAYS_INLINE u32 gte_chk_rgb_b(struct psycho_cpu *const cpu,
+				       const s32 value)
+{
+	return gte_chk_rgb(cpu, value, CPU_CP2_CCR_FLAG_RGB_B_SATURATED);
+}
+
+static ALWAYS_INLINE void gte_rgb_push(struct psycho_cpu *const cpu)
+{
+	const u32 b = gte_chk_rgb_b(cpu, (s32)MAC3 >> 4) << 16;
+	const u32 g = gte_chk_rgb_g(cpu, (s32)MAC2 >> 4) << 8;
+	const u32 r = gte_chk_rgb_r(cpu, (s32)MAC1 >> 4);
+
+	RGB0 = RGB1;
+	RGB1 = RGB2;
+	RGB2 = (((u32)RGBC[3] << 24)) | b | g | r;
+
+	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
+
+	IR1 = gte_chk_ir1(cpu, (s32)MAC1, lm);
+	IR2 = gte_chk_ir2(cpu, (s32)MAC2, lm);
+	IR3 = gte_chk_ir3(cpu, (s32)MAC3, lm);
+}
+
+static void gte_intpl_color(struct psycho_cpu *const cpu)
+{
+	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
+
+	const s64 m1 = MAC1;
+	const s64 m2 = MAC2;
+	const s64 m3 = MAC3;
+
+	MAC1 = gte_mac1_chk(cpu, (s64)(((u64)RFC << 12) - (u64)m1)) >> sf;
+	MAC2 = gte_mac2_chk(cpu, (s64)(((u64)GFC << 12) - (u64)m2)) >> sf;
+	MAC3 = gte_mac3_chk(cpu, (s64)(((u64)BFC << 12) - (u64)m3)) >> sf;
+
+	IR1 = gte_chk_ir1(cpu, (s32)MAC1, false);
+	IR2 = gte_chk_ir2(cpu, (s32)MAC2, false);
+	IR3 = gte_chk_ir3(cpu, (s32)MAC3, false);
+
+	MAC1 = ((IR1 * IR0) + m1) >> sf;
+	MAC2 = ((IR2 * IR0) + m2) >> sf;
+	MAC3 = ((IR3 * IR0) + m3) >> sf;
+}
+
+static void gte_dpc(struct psycho_cpu *const cpu, const u8 *const rgb)
+{
+	MAC1 = rgb[0] << 16;
+	MAC2 = rgb[1] << 16;
+	MAC3 = rgb[2] << 16;
+
+	gte_intpl_color(cpu);
+	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 }
 
@@ -945,7 +1055,7 @@ void cpu_step(struct psycho_cpu *const cpu)
 	// clang-format on
 
 	u64 prod;
-	uint shift, mask;
+	uint shift, mask, sf;
 	u32 jmp_tgt, sum, paddr, vaddr, data, word, aligned_paddr;
 	s32 b, g, r;
 	s16 signed_hword;
@@ -953,6 +1063,8 @@ void cpu_step(struct psycho_cpu *const cpu)
 	bool cond_met;
 	u8 ubyte;
 	s8 sbyte;
+	bool lm;
+	s32 tx[3][4];
 
 	PC = (u32)(NPC - sizeof(u32));
 	NPC += sizeof(u32);
@@ -1349,15 +1461,50 @@ op_gpl:
 	goto end;
 
 op_nclip:
+	FLAG = 0;
+
+	MAC0 = gte_mac0_add(cpu, (s64)(SX0 * (SY1 - SY2)) +
+					 (SX1 * (SY2 - SY0)) +
+					 (SX2 * (SY0 - SY1)));
+
+	gte_flag_update(cpu);
 	goto end;
 
 op_op:
+	FLAG = 0;
+
+	sf = cpu_instr_shift_frac_get(cpu->instr);
+
+	MAC1 = gte_mac1_chk(cpu, (IR3 * D2) - (IR2 * D3)) >> sf;
+	MAC2 = gte_mac2_chk(cpu, (IR1 * D3) - (IR3 * D1)) >> sf;
+	MAC3 = gte_mac3_chk(cpu, (IR2 * D1) - (IR1 * D2)) >> sf;
+
+	lm = cpu->instr & CPU_INSTR_LM_FLAG;
+
+	IR1 = gte_chk_ir1(cpu, (s32)MAC1, lm);
+	IR2 = gte_chk_ir2(cpu, (s32)MAC2, lm);
+	IR3 = gte_chk_ir3(cpu, (s32)MAC3, lm);
+
+	gte_flag_update(cpu);
 	goto end;
 
 op_dpcs:
+	FLAG = 0;
+
+	gte_dpc(cpu, RGBC);
 	goto end;
 
 op_intpl:
+	FLAG = 0;
+
+	MAC1 = IR1 << 12;
+	MAC2 = IR2 << 12;
+	MAC3 = IR3 << 12;
+
+	gte_intpl_color(cpu);
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+
 	goto end;
 
 op_mvmva:
