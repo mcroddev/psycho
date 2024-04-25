@@ -142,6 +142,7 @@
 #define IR1	(cpu->cp2.cpr.IR1)
 #define IR2	(cpu->cp2.cpr.IR2)
 #define IR3	(cpu->cp2.cpr.IR3)
+
 #define LZCR	(cpu->cp2.cpr.LZCR)
 #define LZCS	(cpu->cp2.cpr.LZCS)
 #define MAC0	(cpu->cp2.MAC0)
@@ -168,6 +169,8 @@
 #define SZ3	(cpu->cp2.cpr.SZ3)
 #define V	(cpu->cp2.cpr.V)
 #define V0	(V[0])
+#define V1	(V[1])
+#define V2	(V[2])
 #define VX0	((s16)(VXY0 & 0xFFFF))
 #define VX1	((s16)(VXY1 & 0xFFFF))
 #define VX2	((s16)(VXY2 & 0xFFFF))
@@ -182,17 +185,20 @@
 #define VZ2	(cpu->cp2.cpr.VZ2)
 
 #define CP2_CCR	(cpu->cp2.ccr.regs)
-#define BBK	(cpu->cp2.ccr.BBK)
-#define BFC	(cpu->cp2.ccr.BFC)
+#define BK	(cpu->cp2.ccr.BK)
+#define FC	(cpu->cp2.ccr.FC)
+#define RFC	(FC[0])
+#define GFC	(FC[1])
+#define BFC	(FC[2])
 #define D1	(RT[0][0])
 #define D2	(RT[1][1])
 #define D3	(RT[2][2])
 #define DQA	(cpu->cp2.ccr.DQA)
 #define DQB	(cpu->cp2.ccr.DQB)
 #define FLAG	(cpu->cp2.ccr.FLAG)
-#define GBK	(cpu->cp2.ccr.GBK)
-#define GFC	(cpu->cp2.ccr.GFC)
 #define H	(cpu->cp2.ccr.H)
+#define LCM	(cpu->cp2.ccr.LCM)
+#define LLM	(cpu->cp2.ccr.LLM)
 #define L11	((s16)(L11L12 & 0xFFFF))
 #define L11L12	(cpu->cp2.ccr.L11L12)
 #define L12	((s16)(L11L12 >> 16))
@@ -225,8 +231,6 @@
 #define R13R21	(cpu->cp2.ccr.R13R21)
 #define R22R23	(cpu->cp2.ccr.R22R23)
 #define R31R32	(cpu->cp2.ccr.R31R32)
-#define RBK	(cpu->cp2.ccr.RBK)
-#define RFC	(cpu->cp2.ccr.RFC)
 #define RT	(cpu->cp2.ccr.RT)
 #define RT11	(D1)
 #define RT12	((s16)(R11R12 >> 16))
@@ -468,6 +472,27 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 	iter(1);
 	iter(2);
 	iter(3);
+#undef iter
+}
+
+static void gte_matmul_ir(struct psycho_cpu *const cpu, const s32 *const v0,
+			  const s16 v1[3][3], const s16 *const v2)
+{
+	gte_matmul(cpu, v0, v1, v2);
+
+	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
+	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
+
+#define iter(n)                                              \
+	({                                                   \
+		MAC##n >>= sf;                               \
+		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm); \
+	})
+
+	iter(1);
+	iter(2);
+	iter(3);
+
 #undef iter
 }
 
@@ -1052,6 +1077,33 @@ void cpu_step(struct psycho_cpu *const cpu)
 		[CPU_CP2_CCR_ZSF3 ... CPU_CP2_CCR_ZSF4]		= &&cp2_ct_sext,
 		[CPU_CP2_CCR_FLAG]				= &&cp2_ct_flag
 	};
+
+	static const void *const mvmva_mx_tbl[] = {
+		[0]	= &&op_mvmva_mx_rt,
+		[1]	= &&op_mvmva_mx_llm,
+		[2]	= &&op_mvmva_mx_lcm,
+		[3]	= &&op_mvmva_mx_bugged
+	};
+
+	static const void *const mvmva_vx_tbl[] = {
+		[0]	= &&op_mvmva_vx_v0,
+		[1]	= &&op_mvmva_vx_v1,
+		[2]	= &&op_mvmva_vx_v2,
+		[3]	= &&op_mvmva_vx_ir
+	};
+
+	static const void *const mvmva_tx_tbl[] = {
+		[0]	= &&op_mvmva_tx_tr,
+		[1]	= &&op_mvmva_tx_bk,
+		[2]	= &&op_mvmva_tx_fc,
+		[3]	= &&op_mvmva_tx_null
+	};
+
+	static const void *const mvmva_impl_tbl[] = {
+		[0 ... 1]	= &&op_mvmva_impl,
+		[2]		= &&op_mvmva_impl_bugged,
+		[3]		= &&op_mvmva_impl
+	};
 	// clang-format on
 
 	u64 prod;
@@ -1064,7 +1116,11 @@ void cpu_step(struct psycho_cpu *const cpu)
 	u8 ubyte;
 	s8 sbyte;
 	bool lm;
-	s32 tx[3][4];
+
+	uint tx;
+	s16 Vx[3];
+	s32 Tx[3];
+	s16 Mx[3][3];
 
 	PC = (u32)(NPC - sizeof(u32));
 	NPC += sizeof(u32);
@@ -1508,6 +1564,99 @@ op_intpl:
 	goto end;
 
 op_mvmva:
+	FLAG = 0;
+
+	tx = cpu_instr_tx_get(cpu->instr);
+	goto *mvmva_mx_tbl[cpu_instr_mx_get(cpu->instr)];
+
+op_mvmva_mx_rt:
+	memcpy(Mx, RT, sizeof(Mx));
+	goto *mvmva_vx_tbl[cpu_instr_vx_get(cpu->instr)];
+
+op_mvmva_mx_llm:
+	memcpy(Mx, LLM, sizeof(Mx));
+	goto *mvmva_vx_tbl[cpu_instr_vx_get(cpu->instr)];
+
+op_mvmva_mx_lcm:
+	memcpy(Mx, LCM, sizeof(Mx));
+	goto *mvmva_vx_tbl[cpu_instr_vx_get(cpu->instr)];
+
+op_mvmva_mx_bugged:
+	Mx[0][0] = (s16) - ((RGBC[0]) << 4);
+	Mx[0][1] = (s16)((RGBC[0]) << 4);
+	Mx[0][2] = IR0;
+	Mx[1][0] = RT[0][2];
+	Mx[1][1] = RT[0][2];
+	Mx[1][2] = RT[0][2];
+	Mx[2][0] = RT[1][1];
+	Mx[2][1] = RT[1][1];
+	Mx[2][2] = RT[1][1];
+
+	goto *mvmva_vx_tbl[cpu_instr_vx_get(cpu->instr)];
+
+op_mvmva_vx_v0:
+	memcpy(Vx, V0, sizeof(Vx));
+	goto *mvmva_tx_tbl[tx];
+
+op_mvmva_vx_v1:
+	memcpy(Vx, V1, sizeof(Vx));
+	goto *mvmva_tx_tbl[tx];
+
+op_mvmva_vx_v2:
+	memcpy(Vx, V2, sizeof(Vx));
+	goto *mvmva_tx_tbl[tx];
+
+op_mvmva_vx_ir:
+	Vx[0] = IR1;
+	Vx[1] = IR2;
+	Vx[2] = IR3;
+
+	goto *mvmva_tx_tbl[tx];
+
+op_mvmva_tx_tr:
+	memcpy(Tx, TR, sizeof(Tx));
+	goto *mvmva_impl_tbl[tx];
+
+op_mvmva_tx_bk:
+	memcpy(Tx, BK, sizeof(Tx));
+	goto *mvmva_impl_tbl[tx];
+
+op_mvmva_tx_fc:
+	memcpy(Tx, FC, sizeof(Tx));
+	goto *mvmva_impl_tbl[tx];
+
+op_mvmva_tx_null:
+	memset(Tx, 0, sizeof(Tx));
+	goto *mvmva_impl_tbl[tx];
+
+op_mvmva_impl:
+	gte_matmul_ir(cpu, Tx, Mx, Vx);
+	gte_flag_update(cpu);
+	goto end;
+
+op_mvmva_impl_bugged:
+	lm = cpu->instr & CPU_INSTR_LM_FLAG;
+	sf = cpu_instr_shift_frac_get(cpu->instr);
+
+#define iter(n)                                                              \
+	({                                                                   \
+		MAC##n = 0;                                                  \
+		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)Tx[n - 1] << 12)); \
+		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][0] * Vx[0]);        \
+		MAC##n >>= sf;                                               \
+		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, false);              \
+                                                                             \
+		MAC##n = 0;                                                  \
+		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][1] * Vx[1]);        \
+		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][2] * Vx[2]);        \
+		MAC##n >>= sf;                                               \
+		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm);                 \
+	})
+	iter(1);
+	iter(2);
+	iter(3);
+#undef iter
+	gte_flag_update(cpu);
 	goto end;
 
 op_nccs:

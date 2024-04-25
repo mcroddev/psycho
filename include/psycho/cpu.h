@@ -102,22 +102,10 @@ struct psycho_cpu {
 			struct {
 				s16 RT[3][3];
 				s32 TR[3];
-				s32 L11L12; // 8
-				s32 L13L21; // 9
-				s32 L22L23; // 10
-				s32 L31L32; // 11
-				s16 L33; // 12
-				s32 RBK; // 13
-				s32 GBK; // 14
-				s32 BBK; // 15
-				s32 LR1LR2; // 16
-				s32 LR3LG1; // 17
-				s32 LG2LG3; // 18
-				s32 LB1LB2; // 19
-				s16 LB3; // 20
-				s32 RFC; // 21
-				s32 GFC; // 22
-				s32 BFC; // 23
+				s16 LLM[3][3];
+				s32 BK[3];
+				s16 LCM[3][3];
+				s32 FC[3];
 				s32 OFX; // 24
 				s32 OFY; // 25
 				u16 H; // 26
