@@ -532,13 +532,16 @@ static void gte_matmul_vec_ir(struct psycho_cpu *const cpu, const s32 *const v0,
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * IR2);          \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * IR3);          \
 		MAC##n >>= sf;                                               \
-		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm);                 \
 	})
 
 	iter(1);
 	iter(2);
 	iter(3);
 #undef iter
+
+	IR1 = gte_chk_ir1(cpu, (s32)MAC1, lm);
+	IR2 = gte_chk_ir2(cpu, (s32)MAC2, lm);
+	IR3 = gte_chk_ir3(cpu, (s32)MAC3, lm);
 }
 
 static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
