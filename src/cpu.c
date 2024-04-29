@@ -683,9 +683,9 @@ static void gte_intpl_color(struct psycho_cpu *const cpu)
 {
 	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
 
-	const s64 m1 = MAC1;
-	const s64 m2 = MAC2;
-	const s64 m3 = MAC3;
+	const s32 m1 = (s32)MAC1;
+	const s32 m2 = (s32)MAC2;
+	const s32 m3 = (s32)MAC3;
 
 	MAC1 = gte_mac1_chk(cpu, (s64)(((u64)RFC << 12) - (u64)m1)) >> sf;
 	MAC2 = gte_mac2_chk(cpu, (s64)(((u64)GFC << 12) - (u64)m2)) >> sf;
