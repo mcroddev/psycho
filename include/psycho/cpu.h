@@ -80,7 +80,7 @@ struct psycho_cpu {
 				u16 SZ2; // 18
 				u16 pad6;
 				u16 SZ3; // 19
-				u32 RGB0; // 20
+				u8 RGB0[4];
 				u32 RGB1; // 21
 				u32 RGB2; // 22
 				u32 RES1; // 23

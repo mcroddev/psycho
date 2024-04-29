@@ -668,9 +668,9 @@ static ALWAYS_INLINE void gte_rgb_push(struct psycho_cpu *const cpu)
 	const u32 g = gte_chk_rgb_g(cpu, (s32)MAC2 >> 4) << 8;
 	const u32 r = gte_chk_rgb_r(cpu, (s32)MAC1 >> 4);
 
-	RGB0 = RGB1;
-	RGB1 = RGB2;
-	RGB2 = (((u32)RGBC[3] << 24)) | b | g | r;
+	CP2_CPR[CPU_CP2_CPR_RGB0] = CP2_CPR[CPU_CP2_CPR_RGB1];
+	CP2_CPR[CPU_CP2_CPR_RGB1] = CP2_CPR[CPU_CP2_CPR_RGB2];
+	CP2_CPR[CPU_CP2_CPR_RGB2] = (((u32)RGBC[3] << 24)) | b | g | r;
 
 	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
 
