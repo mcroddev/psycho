@@ -702,9 +702,9 @@ static void gte_intpl_color(struct psycho_cpu *const cpu)
 
 static void gte_intpl_rgb(struct psycho_cpu *const cpu)
 {
-	MAC1 = (RGBC[0] * IR1) << 4;
+	MAC1 = (RGBC[0] * (u32)IR1) << 4;
 	MAC2 = (RGBC[1] * (u32)IR2) << 4;
-	MAC3 = (RGBC[2] * IR3) << 4;
+	MAC3 = (RGBC[2] * (u32)IR3) << 4;
 }
 
 static void gte_dpc(struct psycho_cpu *const cpu, const u8 *const rgb)
@@ -724,6 +724,30 @@ static void gte_ncd(struct psycho_cpu *const cpu, const s16 *const vec)
 	gte_matmul_vec_ir(cpu, BK, LCM);
 	gte_intpl_rgb(cpu);
 	gte_intpl_color(cpu);
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+}
+
+static void gte_ncc(struct psycho_cpu *const cpu, const s16 *const vec)
+{
+	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
+
+	gte_matmul_vec(cpu, LLM, vec);
+	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_intpl_rgb(cpu);
+
+	MAC1 = (s32)MAC1 >> sf;
+	MAC2 = (s32)MAC2 >> sf;
+	MAC3 = (s32)MAC3 >> sf;
+
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+}
+
+static void gte_nc(struct psycho_cpu *const cpu, const s16 *const vec)
+{
+	gte_matmul_vec(cpu, LLM, vec);
+	gte_matmul_vec_ir(cpu, BK, LCM);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 }
@@ -1725,9 +1749,26 @@ op_mvmva_impl_bugged:
 	goto end;
 
 op_nccs:
+	FLAG = 0;
+
+	gte_ncc(cpu, V0);
 	goto end;
 
 op_cc:
+	sf = cpu_instr_shift_frac_get(cpu->instr);
+
+	FLAG = 0;
+
+	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_intpl_rgb(cpu);
+
+	MAC1 = (s32)MAC1 >> sf;
+	MAC2 = (s32)MAC2 >> sf;
+	MAC3 = (s32)MAC3 >> sf;
+
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+
 	goto end;
 
 op_ncds:
@@ -1737,27 +1778,76 @@ op_ncds:
 	goto end;
 
 op_cdp:
+	FLAG = 0;
+
+	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_intpl_rgb(cpu);
+	gte_intpl_color(cpu);
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+
 	goto end;
 
 op_ncdt:
+	FLAG = 0;
+
+	gte_ncd(cpu, V0);
+	gte_ncd(cpu, V1);
+	gte_ncd(cpu, V2);
+
 	goto end;
 
 op_ncs:
+	FLAG = 0;
+
+	gte_nc(cpu, V0);
 	goto end;
 
 op_nct:
+	FLAG = 0;
+
+	gte_nc(cpu, V0);
+	gte_nc(cpu, V1);
+	gte_nc(cpu, V2);
+
 	goto end;
 
 op_sqr:
+	FLAG = 0;
+
+	sf = cpu_instr_shift_frac_get(cpu->instr);
+
+	MAC1 = gte_mac1_chk(cpu, IR1 * IR1) >> sf;
+	MAC2 = gte_mac2_chk(cpu, IR2 * IR2) >> sf;
+	MAC3 = gte_mac3_chk(cpu, IR3 * IR3) >> sf;
+
+	IR1 = gte_chk_ir1(cpu, (s32)MAC1, true);
+	IR2 = gte_chk_ir2(cpu, (s32)MAC2, true);
+	IR3 = gte_chk_ir3(cpu, (s32)MAC3, true);
+
+	gte_flag_update(cpu);
 	goto end;
 
 op_dcpl:
+	FLAG = 0;
+
+	gte_intpl_rgb(cpu);
+	gte_intpl_color(cpu);
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+
 	goto end;
 
 op_ncct:
 	goto end;
 
 op_dpct:
+	FLAG = 0;
+
+	gte_dpc(cpu, RGB0);
+	gte_dpc(cpu, RGB0);
+	gte_dpc(cpu, RGB0);
+
 	goto end;
 
 op_avsz3:
