@@ -475,6 +475,28 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 #undef iter
 }
 
+static void gte_matmul_vec(struct psycho_cpu *const cpu, const s16 mat[3][3],
+			   const s16 *const vec)
+{
+	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
+	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
+
+#define iter(n)                                                         \
+	({                                                              \
+		MAC##n = 0;                                             \
+		MAC##n = gte_mac##n##_add(cpu, mat[n - 1][0] * vec[0]); \
+		MAC##n = gte_mac##n##_add(cpu, mat[n - 1][1] * vec[1]); \
+		MAC##n = gte_mac##n##_add(cpu, mat[n - 1][2] * vec[2]); \
+		MAC##n >>= sf;                                          \
+		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm);            \
+	})
+
+	iter(1);
+	iter(2);
+	iter(3);
+#undef iter
+}
+
 static void gte_matmul_ir(struct psycho_cpu *const cpu, const s32 *const v0,
 			  const s16 v1[3][3], const s16 *const v2)
 {
@@ -493,6 +515,29 @@ static void gte_matmul_ir(struct psycho_cpu *const cpu, const s32 *const v0,
 	iter(2);
 	iter(3);
 
+#undef iter
+}
+
+static void gte_matmul_vec_ir(struct psycho_cpu *const cpu, const s32 *const v0,
+			      const s16 v1[3][3])
+{
+	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
+	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
+
+#define iter(n)                                                              \
+	({                                                                   \
+		MAC##n = 0;                                                  \
+		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)v0[n - 1] << 12)); \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * IR1);          \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * IR2);          \
+		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * IR3);          \
+		MAC##n >>= sf;                                               \
+		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm);                 \
+	})
+
+	iter(1);
+	iter(2);
+	iter(3);
 #undef iter
 }
 
@@ -652,12 +697,29 @@ static void gte_intpl_color(struct psycho_cpu *const cpu)
 	MAC3 = ((IR3 * IR0) + m3) >> sf;
 }
 
+static void gte_intpl_rgb(struct psycho_cpu *const cpu)
+{
+	MAC1 = (RGBC[0] * IR1) << 4;
+	MAC2 = (RGBC[1] * (u32)IR2) << 4;
+	MAC3 = (RGBC[2] * IR3) << 4;
+}
+
 static void gte_dpc(struct psycho_cpu *const cpu, const u8 *const rgb)
 {
 	MAC1 = rgb[0] << 16;
 	MAC2 = rgb[1] << 16;
 	MAC3 = rgb[2] << 16;
 
+	gte_intpl_color(cpu);
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+}
+
+static void gte_ncd(struct psycho_cpu *const cpu, const s16 *const vec)
+{
+	gte_matmul_vec(cpu, LLM, vec);
+	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_intpl_rgb(cpu);
 	gte_intpl_color(cpu);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
@@ -1666,6 +1728,9 @@ op_cc:
 	goto end;
 
 op_ncds:
+	FLAG = 0;
+
+	gte_ncd(cpu, V0);
 	goto end;
 
 op_cdp:
