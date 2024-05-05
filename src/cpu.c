@@ -544,7 +544,8 @@ static void gte_matmul_vec_ir(struct psycho_cpu *const cpu, const s32 *const v0,
 	IR3 = gte_chk_ir3(cpu, (s32)MAC3, lm);
 }
 
-static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
+static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec,
+		    const bool last_vertex)
 {
 	// XXX: This LUT is inefficient.
 	static const u8 unr_table[] = {
@@ -585,7 +586,7 @@ static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 	SZ0 = SZ1;
 	SZ1 = SZ2;
 	SZ2 = SZ3;
-	SZ3 = gte_chk_sz3_otz(cpu, MAC3);
+	SZ3 = gte_chk_sz3_otz(cpu, (s32)(MAC3 >> 12));
 
 	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
 	IR1 = gte_chk_ir1(cpu, (s32)MAC1, lm);
@@ -623,9 +624,10 @@ static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec)
 	SXY1 = SXY2;
 	SXY2 = (s32)(((u32)sx & 0xFFFF) | ((u32)sy << 16));
 
-	MAC0 = gte_mac0_add(cpu, (quot * DQA) + DQB);
-	IR0 = gte_chk_ir0(cpu, MAC0 >> 12);
-
+	if (last_vertex) {
+		MAC0 = gte_mac0_add(cpu, (quot * DQA) + DQB);
+		IR0 = gte_chk_ir0(cpu, MAC0 >> 12);
+	}
 	gte_flag_update(cpu);
 }
 
@@ -749,6 +751,16 @@ static void gte_nc(struct psycho_cpu *const cpu, const s16 *const vec)
 	gte_matmul_vec(cpu, LLM, vec);
 	gte_matmul_vec_ir(cpu, BK, LCM);
 	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+}
+
+static void gte_avsz(struct psycho_cpu *const cpu, const s16 zsf, const u16 sz0)
+{
+	FLAG = 0;
+
+	MAC0 = gte_mac0_add(cpu, (s64)(zsf) * (sz0 + SZ1 + SZ2 + SZ3));
+	OTZ = gte_chk_sz3_otz(cpu, MAC0 >> 12);
+
 	gte_flag_update(cpu);
 }
 
@@ -1593,16 +1605,44 @@ op_cp2_funct:
 op_rtps:
 	FLAG = 0;
 
-	gte_rtp(cpu, V0);
+	gte_rtp(cpu, V0, true);
 	goto end;
 
 op_rtpt:
+	FLAG = 0;
+
+	gte_rtp(cpu, V0, false);
+	gte_rtp(cpu, V1, false);
+	gte_rtp(cpu, V2, true);
+
 	goto end;
 
 op_gpf:
-	goto end;
+	MAC1 = 0;
+	MAC2 = 0;
+	MAC3 = 0;
+
+	goto op_gpl;
 
 op_gpl:
+	sf = cpu_instr_shift_frac_get(cpu->instr);
+
+	MAC1 = gte_mac1_chk(cpu, (s64)((u64)MAC1 << sf));
+	MAC2 = gte_mac2_chk(cpu, (s64)((u64)MAC2 << sf));
+	MAC3 = gte_mac3_chk(cpu, (s64)((u64)MAC3 << sf));
+
+	goto op_gp;
+
+op_gp:
+	FLAG = 0;
+
+	MAC1 = gte_mac1_add(cpu, IR1 * IR0) >> sf;
+	MAC2 = gte_mac2_add(cpu, IR2 * IR0) >> sf;
+	MAC3 = gte_mac3_add(cpu, IR3 * IR0) >> sf;
+
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
+
 	goto end;
 
 op_nclip:
@@ -1839,6 +1879,12 @@ op_dcpl:
 	goto end;
 
 op_ncct:
+	FLAG = 0;
+
+	gte_ncc(cpu, V0);
+	gte_ncc(cpu, V1);
+	gte_ncc(cpu, V2);
+
 	goto end;
 
 op_dpct:
@@ -1851,9 +1897,15 @@ op_dpct:
 	goto end;
 
 op_avsz3:
+	FLAG = 0;
+
+	gte_avsz(cpu, ZSF3, 0);
 	goto end;
 
 op_avsz4:
+	FLAG = 0;
+
+	gte_avsz(cpu, ZSF4, SZ0);
 	goto end;
 
 cp2_mf_lzcr:
