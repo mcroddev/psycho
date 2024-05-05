@@ -1353,6 +1353,12 @@ op_j:
 	goto end;
 
 op_jal:
+	// Delayed load is "cancelled" by the JAL due to the interlock between
+	// $ra in the LW and the implicit $ra store in the JAL.
+	if (LDS_NEXT.dst == ra) {
+		memset(&LDS_NEXT, 0, sizeof(LDS_NEXT));
+	}
+
 	GPR[ra] = PC + 8;
 	NPC = cpu_jmp_tgt_get(cpu->instr, cpu->pc);
 
