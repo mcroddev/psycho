@@ -151,8 +151,6 @@
 #define MAC3	(cpu->cp2.MAC3)
 #define OTZ	(cpu->cp2.cpr.OTZ)
 #define RGB0	(cpu->cp2.cpr.RGB0)
-#define RGB1	(cpu->cp2.cpr.RGB1)
-#define RGB2	(cpu->cp2.cpr.RGB2)
 #define RGBC	(cpu->cp2.cpr.RGBC)
 #define SX0	((s16)(SXY0 & 0xFFFF))
 #define SX1	((s16)(SXY1 & 0xFFFF))
@@ -171,18 +169,6 @@
 #define V0	(V[0])
 #define V1	(V[1])
 #define V2	(V[2])
-#define VX0	((s16)(VXY0 & 0xFFFF))
-#define VX1	((s16)(VXY1 & 0xFFFF))
-#define VX2	((s16)(VXY2 & 0xFFFF))
-#define VXY0	(cpu->cp2.cpr.VXY0)
-#define VXY1	(cpu->cp2.cpr.VXY1)
-#define VXY2	(cpu->cp2.cpr.VXY2)
-#define VY0	((s16)(VXY0 >> 16))
-#define VY1	((s16)(VXY1 >> 16))
-#define VY2	((s16)(VXY2 >> 16))
-#define VZ0	(cpu->cp2.cpr.VZ0)
-#define VZ1	(cpu->cp2.cpr.VZ1)
-#define VZ2	(cpu->cp2.cpr.VZ2)
 
 #define CP2_CCR	(cpu->cp2.ccr.regs)
 #define BK	(cpu->cp2.ccr.BK)
@@ -199,48 +185,9 @@
 #define H	(cpu->cp2.ccr.H)
 #define LCM	(cpu->cp2.ccr.LCM)
 #define LLM	(cpu->cp2.ccr.LLM)
-#define L11	((s16)(L11L12 & 0xFFFF))
-#define L11L12	(cpu->cp2.ccr.L11L12)
-#define L12	((s16)(L11L12 >> 16))
-#define L13	((s16)(L13L21 & 0xFFFF))
-#define L13L21	(cpu->cp2.ccr.L13L21)
-#define L21	((s16)(L13L21 >> 16))
-#define L22	((s16)(L22L23 & 0xFFFF))
-#define L22L23	(cpu->cp2.ccr.L22L23)
-#define L23	((s16)(L22L23 >> 16))
-#define L31	((s16)(L31L32 & 0xFFFF))
-#define L31L32	(cpu->cp2.ccr.L31L32)
-#define L32	((s16)(L31L32 >> 16))
-#define L33	(cpu->cp2.ccr.L33)
-#define LB1	((s16)(LB1LB2 & 0xFFFF))
-#define LB1LB2	(cpu->cp2.ccr.LB1LB2)
-#define LB2	((s16)(LB1LB2 >> 16))
-#define LB3	(cpu->cp2.ccr.LB3)
-#define LG1	((s16)(LR3LG1 >> 16))
-#define LG2	((s16)(LG2LG3 & 0xFFFF))
-#define LG2LG3	(cpu->cp2.ccr.LG2LG3)
-#define LG3	((s16)(LG2LG3 >> 16))
-#define LR1	((s16)(LR1LR2 & 0xFFFF))
-#define LR1LR2	(cpu->cp2.ccr.LR1LR2)
-#define LR2	((s16)(LR1LR2 >> 16))
-#define LR3	((s16)(LR3LG1 & 0xFFFF))
-#define LR3LG1	(cpu->cp2.ccr.LR3LG1)
 #define OFX	(cpu->cp2.ccr.OFX)
 #define OFY	(cpu->cp2.ccr.OFY)
-#define R11R12	(cpu->cp2.ccr.R11R12)
-#define R13R21	(cpu->cp2.ccr.R13R21)
-#define R22R23	(cpu->cp2.ccr.R22R23)
-#define R31R32	(cpu->cp2.ccr.R31R32)
 #define RT	(cpu->cp2.ccr.RT)
-#define RT11	(D1)
-#define RT12	((s16)(R11R12 >> 16))
-#define RT13	((s16)(R13R21 & 0xFFFF))
-#define RT21	((s16)(R13R21 >> 16))
-#define RT22	(D2)
-#define RT23	((s16)(R22R23 >> 16))
-#define RT31	((s16)(R31R32 & 0xFFFF))
-#define RT32	((s16)(R31R32 >> 16))
-#define RT33	(cpu->cp2.ccr.R33)
 #define TR	(cpu->cp2.ccr.TR)
 #define ZSF3	(cpu->cp2.ccr.ZSF3)
 #define ZSF4	(cpu->cp2.ccr.ZSF4)
@@ -475,8 +422,8 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 #undef iter
 }
 
-static void gte_matmul_vec(struct psycho_cpu *const cpu, const s16 mat[3][3],
-			   const s16 *const vec)
+static void
+gte_matmul_llm_vec(struct psycho_cpu *const cpu, const s16 *const vec)
 {
 	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
 	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
@@ -484,9 +431,9 @@ static void gte_matmul_vec(struct psycho_cpu *const cpu, const s16 mat[3][3],
 #define iter(n)                                                         \
 	({                                                              \
 		MAC##n = 0;                                             \
-		MAC##n = gte_mac##n##_add(cpu, mat[n - 1][0] * vec[0]); \
-		MAC##n = gte_mac##n##_add(cpu, mat[n - 1][1] * vec[1]); \
-		MAC##n = gte_mac##n##_add(cpu, mat[n - 1][2] * vec[2]); \
+		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][0] * vec[0]); \
+		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][1] * vec[1]); \
+		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][2] * vec[2]); \
 		MAC##n >>= sf;                                          \
 		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm);            \
 	})
@@ -518,8 +465,7 @@ static void gte_matmul_ir(struct psycho_cpu *const cpu, const s32 *const v0,
 #undef iter
 }
 
-static void gte_matmul_vec_ir(struct psycho_cpu *const cpu, const s32 *const v0,
-			      const s16 v1[3][3])
+static void gte_intpl_bk_lcm(struct psycho_cpu *const cpu)
 {
 	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
 	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
@@ -527,10 +473,10 @@ static void gte_matmul_vec_ir(struct psycho_cpu *const cpu, const s32 *const v0,
 #define iter(n)                                                              \
 	({                                                                   \
 		MAC##n = 0;                                                  \
-		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)v0[n - 1] << 12)); \
-		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * IR1);          \
-		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * IR2);          \
-		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * IR3);          \
+		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)BK[n - 1] << 12)); \
+		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][0] * IR1);         \
+		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][1] * IR2);         \
+		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][2] * IR3);         \
 		MAC##n >>= sf;                                               \
 	})
 
@@ -586,7 +532,7 @@ static void gte_rtp(struct psycho_cpu *const cpu, const s16 *const vec,
 	SZ0 = SZ1;
 	SZ1 = SZ2;
 	SZ2 = SZ3;
-	SZ3 = gte_chk_sz3_otz(cpu, (s32)(MAC3 >> 12));
+	SZ3 = gte_chk_sz3_otz(cpu, MAC3 >> 12);
 
 	const bool lm = cpu->instr & CPU_INSTR_LM_FLAG;
 	IR1 = gte_chk_ir1(cpu, (s32)MAC1, lm);
@@ -722,8 +668,8 @@ static void gte_dpc(struct psycho_cpu *const cpu, const u8 *const rgb)
 
 static void gte_ncd(struct psycho_cpu *const cpu, const s16 *const vec)
 {
-	gte_matmul_vec(cpu, LLM, vec);
-	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_matmul_llm_vec(cpu, vec);
+	gte_intpl_bk_lcm(cpu);
 	gte_intpl_rgb(cpu);
 	gte_intpl_color(cpu);
 	gte_rgb_push(cpu);
@@ -734,8 +680,8 @@ static void gte_ncc(struct psycho_cpu *const cpu, const s16 *const vec)
 {
 	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
 
-	gte_matmul_vec(cpu, LLM, vec);
-	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_matmul_llm_vec(cpu, vec);
+	gte_intpl_bk_lcm(cpu);
 	gte_intpl_rgb(cpu);
 
 	MAC1 = (s32)MAC1 >> sf;
@@ -748,8 +694,8 @@ static void gte_ncc(struct psycho_cpu *const cpu, const s16 *const vec)
 
 static void gte_nc(struct psycho_cpu *const cpu, const s16 *const vec)
 {
-	gte_matmul_vec(cpu, LLM, vec);
-	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_matmul_llm_vec(cpu, vec);
+	gte_intpl_bk_lcm(cpu);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 }
@@ -1218,7 +1164,7 @@ void cpu_step(struct psycho_cpu *const cpu)
 	s8 sbyte;
 	bool lm;
 
-	uint tx;
+	uint tx = 0;
 	s16 Vx[3];
 	s32 Tx[3];
 	s16 Mx[3][3];
@@ -1799,7 +1745,7 @@ op_cc:
 
 	FLAG = 0;
 
-	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_intpl_bk_lcm(cpu);
 	gte_intpl_rgb(cpu);
 
 	MAC1 = (s32)MAC1 >> sf;
@@ -1820,7 +1766,7 @@ op_ncds:
 op_cdp:
 	FLAG = 0;
 
-	gte_matmul_vec_ir(cpu, BK, LCM);
+	gte_intpl_bk_lcm(cpu);
 	gte_intpl_rgb(cpu);
 	gte_intpl_color(cpu);
 	gte_rgb_push(cpu);
