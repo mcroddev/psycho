@@ -470,7 +470,6 @@ static void gte_intpl_bk_lcm(struct psycho_cpu *const cpu)
 
 #define iter(n)                                                              \
 	({                                                                   \
-		MAC##n = 0;                                                  \
 		MAC##n = gte_mac##n##_chk(cpu, (s64)((u64)BK[n - 1] << 12)); \
 		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][0] * IR1);         \
 		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][1] * IR2);         \
