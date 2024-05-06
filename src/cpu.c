@@ -410,7 +410,7 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 #define iter(n)                                                              \
 	({                                                                   \
 		MAC##n = 0;                                                  \
-		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)v0[n - 1] << 12)); \
+		MAC##n = gte_mac##n##_chk(cpu, (s64)((u64)v0[n - 1] << 12)); \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * v2[0]);        \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * v2[1]);        \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][2] * v2[2]);        \
@@ -431,7 +431,7 @@ gte_matmul_llm_vec(struct psycho_cpu *const cpu, const s16 *const vec)
 #define iter(n)                                                         \
 	({                                                              \
 		MAC##n = 0;                                             \
-		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][0] * vec[0]); \
+		MAC##n = gte_mac##n##_chk(cpu, LLM[n - 1][0] * vec[0]); \
 		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][1] * vec[1]); \
 		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][2] * vec[2]); \
 		MAC##n >>= sf;                                          \
@@ -473,7 +473,7 @@ static void gte_intpl_bk_lcm(struct psycho_cpu *const cpu)
 #define iter(n)                                                              \
 	({                                                                   \
 		MAC##n = 0;                                                  \
-		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)BK[n - 1] << 12)); \
+		MAC##n = gte_mac##n##_chk(cpu, (s64)((u64)BK[n - 1] << 12)); \
 		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][0] * IR1);         \
 		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][1] * IR2);         \
 		MAC##n = gte_mac##n##_add(cpu, LCM[n - 1][2] * IR3);         \
@@ -627,7 +627,7 @@ static ALWAYS_INLINE void gte_rgb_push(struct psycho_cpu *const cpu)
 	IR3 = gte_chk_ir3(cpu, (s32)MAC3, lm);
 }
 
-static void gte_intpl_color(struct psycho_cpu *const cpu)
+static void gte_intpl_fc(struct psycho_cpu *const cpu)
 {
 	const uint sf = cpu_instr_shift_frac_get(cpu->instr);
 
@@ -661,7 +661,7 @@ static void gte_dpc(struct psycho_cpu *const cpu, const u8 *const rgb)
 	MAC2 = rgb[1] << 16;
 	MAC3 = rgb[2] << 16;
 
-	gte_intpl_color(cpu);
+	gte_intpl_fc(cpu);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 }
@@ -671,7 +671,7 @@ static void gte_ncd(struct psycho_cpu *const cpu, const s16 *const vec)
 	gte_matmul_llm_vec(cpu, vec);
 	gte_intpl_bk_lcm(cpu);
 	gte_intpl_rgb(cpu);
-	gte_intpl_color(cpu);
+	gte_intpl_fc(cpu);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 }
@@ -1612,9 +1612,9 @@ op_op:
 
 	sf = cpu_instr_shift_frac_get(cpu->instr);
 
-	MAC1 = gte_mac1_chk(cpu, (IR3 * D2) - (IR2 * D3)) >> sf;
-	MAC2 = gte_mac2_chk(cpu, (IR1 * D3) - (IR3 * D1)) >> sf;
-	MAC3 = gte_mac3_chk(cpu, (IR2 * D1) - (IR1 * D2)) >> sf;
+	MAC1 = ((IR3 * D2) - (IR2 * D3)) >> sf;
+	MAC2 = ((IR1 * D3) - (IR3 * D1)) >> sf;
+	MAC3 = ((IR2 * D1) - (IR1 * D2)) >> sf;
 
 	lm = cpu->instr & CPU_INSTR_LM_FLAG;
 
@@ -1638,7 +1638,7 @@ op_intpl:
 	MAC2 = IR2 << 12;
 	MAC3 = IR3 << 12;
 
-	gte_intpl_color(cpu);
+	gte_intpl_fc(cpu);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 
@@ -1722,13 +1722,13 @@ op_mvmva_impl_bugged:
 #define iter(n)                                                              \
 	({                                                                   \
 		MAC##n = 0;                                                  \
-		MAC##n = gte_mac##n##_add(cpu, (s64)((u64)Tx[n - 1] << 12)); \
+		MAC##n = gte_mac##n##_chk(cpu, (s64)((u64)Tx[n - 1] << 12)); \
 		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][0] * Vx[0]);        \
 		MAC##n >>= sf;                                               \
 		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, false);              \
                                                                              \
 		MAC##n = 0;                                                  \
-		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][1] * Vx[1]);        \
+		MAC##n = gte_mac##n##_chk(cpu, Mx[n - 1][1] * Vx[1]);        \
 		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][2] * Vx[2]);        \
 		MAC##n >>= sf;                                               \
 		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm);                 \
@@ -1774,7 +1774,7 @@ op_cdp:
 
 	gte_intpl_bk_lcm(cpu);
 	gte_intpl_rgb(cpu);
-	gte_intpl_color(cpu);
+	gte_intpl_fc(cpu);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 
@@ -1783,10 +1783,9 @@ op_cdp:
 op_ncdt:
 	FLAG = 0;
 
-	gte_ncd(cpu, V0);
-	gte_ncd(cpu, V1);
-	gte_ncd(cpu, V2);
-
+	for (int i = 0; i < 3; ++i) {
+		gte_ncd(cpu, V[i]);
+	}
 	goto end;
 
 op_ncs:
@@ -1798,10 +1797,9 @@ op_ncs:
 op_nct:
 	FLAG = 0;
 
-	gte_nc(cpu, V0);
-	gte_nc(cpu, V1);
-	gte_nc(cpu, V2);
-
+	for (int i = 0; i < 3; ++i) {
+		gte_nc(cpu, V[i]);
+	}
 	goto end;
 
 op_sqr:
@@ -1809,9 +1807,9 @@ op_sqr:
 
 	sf = cpu_instr_shift_frac_get(cpu->instr);
 
-	MAC1 = gte_mac1_chk(cpu, IR1 * IR1) >> sf;
-	MAC2 = gte_mac2_chk(cpu, IR2 * IR2) >> sf;
-	MAC3 = gte_mac3_chk(cpu, IR3 * IR3) >> sf;
+	MAC1 = (IR1 * IR1) >> sf;
+	MAC2 = (IR2 * IR2) >> sf;
+	MAC3 = (IR3 * IR3) >> sf;
 
 	IR1 = gte_chk_ir1(cpu, (s32)MAC1, true);
 	IR2 = gte_chk_ir2(cpu, (s32)MAC2, true);
@@ -1824,7 +1822,7 @@ op_dcpl:
 	FLAG = 0;
 
 	gte_intpl_rgb(cpu);
-	gte_intpl_color(cpu);
+	gte_intpl_fc(cpu);
 	gte_rgb_push(cpu);
 	gte_flag_update(cpu);
 
@@ -1833,19 +1831,17 @@ op_dcpl:
 op_ncct:
 	FLAG = 0;
 
-	gte_ncc(cpu, V0);
-	gte_ncc(cpu, V1);
-	gte_ncc(cpu, V2);
-
+	for (int i = 0; i < 3; ++i) {
+		gte_ncc(cpu, V[i]);
+	}
 	goto end;
 
 op_dpct:
 	FLAG = 0;
 
-	gte_dpc(cpu, RGB0);
-	gte_dpc(cpu, RGB0);
-	gte_dpc(cpu, RGB0);
-
+	for (int i = 0; i < 3; ++i) {
+		gte_dpc(cpu, RGB0);
+	}
 	goto end;
 
 op_avsz3:
