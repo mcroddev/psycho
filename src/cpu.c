@@ -409,7 +409,6 @@ static void gte_matmul(struct psycho_cpu *const cpu, const s32 *const v0,
 {
 #define iter(n)                                                              \
 	({                                                                   \
-		MAC##n = 0;                                                  \
 		MAC##n = gte_mac##n##_chk(cpu, (s64)((u64)v0[n - 1] << 12)); \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][0] * v2[0]);        \
 		MAC##n = gte_mac##n##_add(cpu, v1[n - 1][1] * v2[1]);        \
@@ -430,7 +429,6 @@ gte_matmul_llm_vec(struct psycho_cpu *const cpu, const s16 *const vec)
 
 #define iter(n)                                                         \
 	({                                                              \
-		MAC##n = 0;                                             \
 		MAC##n = gte_mac##n##_chk(cpu, LLM[n - 1][0] * vec[0]); \
 		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][1] * vec[1]); \
 		MAC##n = gte_mac##n##_add(cpu, LLM[n - 1][2] * vec[2]); \
@@ -1721,13 +1719,11 @@ op_mvmva_impl_bugged:
 
 #define iter(n)                                                              \
 	({                                                                   \
-		MAC##n = 0;                                                  \
 		MAC##n = gte_mac##n##_chk(cpu, (s64)((u64)Tx[n - 1] << 12)); \
 		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][0] * Vx[0]);        \
 		MAC##n >>= sf;                                               \
 		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, false);              \
                                                                              \
-		MAC##n = 0;                                                  \
 		MAC##n = gte_mac##n##_chk(cpu, Mx[n - 1][1] * Vx[1]);        \
 		MAC##n = gte_mac##n##_add(cpu, Mx[n - 1][2] * Vx[2]);        \
 		MAC##n >>= sf;                                               \
