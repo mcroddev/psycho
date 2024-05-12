@@ -1567,23 +1567,27 @@ op_rtpt:
 	goto end;
 
 op_gpf:
-	MAC1 = 0;
-	MAC2 = 0;
-	MAC3 = 0;
+	FLAG = 0;
 
-	goto op_gpl;
-
-op_gpl:
 	sf = cpu_instr_shift_frac_get(cpu->instr);
 
-	MAC1 = gte_mac1_chk(cpu, (s64)((u64)MAC1 << sf));
-	MAC2 = gte_mac2_chk(cpu, (s64)((u64)MAC2 << sf));
-	MAC3 = gte_mac3_chk(cpu, (s64)((u64)MAC3 << sf));
+	MAC1 = (IR1 * IR0) >> sf;
+	MAC2 = (IR2 * IR0) >> sf;
+	MAC3 = (IR3 * IR0) >> sf;
 
-	goto op_gp;
+	gte_rgb_push(cpu);
+	gte_flag_update(cpu);
 
-op_gp:
+	goto end;
+
+op_gpl:
 	FLAG = 0;
+
+	sf = cpu_instr_shift_frac_get(cpu->instr);
+
+	MAC1 = (s64)((u64)MAC1 << sf);
+	MAC2 = (s64)((u64)MAC2 << sf);
+	MAC3 = (s64)((u64)MAC3 << sf);
 
 	MAC1 = gte_mac1_add(cpu, IR1 * IR0) >> sf;
 	MAC2 = gte_mac2_add(cpu, IR2 * IR0) >> sf;
