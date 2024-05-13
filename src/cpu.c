@@ -1727,7 +1727,7 @@ op_mvmva_impl_bugged:
 		MAC##n >>= sf;                                          \
 		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, false);         \
                                                                         \
-		MAC##n = gte_mac##n##_chk(cpu, Mx[(n) - 1][1] * Vx[1]); \
+		MAC##n = Mx[(n) - 1][1] * Vx[1];                        \
 		MAC##n = gte_mac##n##_add(cpu, Mx[(n) - 1][2] * Vx[2]); \
 		MAC##n >>= sf;                                          \
 		IR##n = gte_chk_ir##n(cpu, (s32)MAC##n, lm);            \
