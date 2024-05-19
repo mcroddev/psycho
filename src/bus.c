@@ -23,6 +23,8 @@
 #include <string.h>
 #include "bus.h"
 #include "dbg_log.h"
+#include "dmac.h"
+#include "gpu.h"
 
 // clang-format off
 
@@ -37,6 +39,9 @@
 #define SPAD_END	(PSYCHO_BUS_SPAD_END)
 #define SPAD_MASK	(0x00000FFF)
 
+#define I_STAT_ADDR	(0x1F801070)
+#define I_MASK_ADDR	(0x1F801074)
+
 // clang-format on
 
 u32 bus_lw(const struct psycho_bus *const bus, const u32 paddr)
@@ -50,6 +55,22 @@ u32 bus_lw(const struct psycho_bus *const bus, const u32 paddr)
 
 	case SPAD_BEG ... SPAD_END:
 		memcpy(&word, &bus->spad[paddr & SPAD_MASK], sizeof(u32));
+		break;
+
+	case DMAC_DPCR_ADDR:
+		word = bus->dmac.dpcr;
+		break;
+
+	case DMAC_DICR_ADDR:
+		word = bus->dmac.dicr;
+		break;
+
+	case I_STAT_ADDR:
+		word = bus->i_stat;
+		break;
+
+	case I_MASK_ADDR:
+		word = bus->i_mask;
 		break;
 
 	case BIOS_BEG ... BIOS_END:
@@ -131,6 +152,98 @@ void bus_sw(struct psycho_bus *const bus, const u32 paddr, const u32 word)
 
 	case SPAD_BEG ... SPAD_END:
 		memcpy(&bus->spad[paddr & SPAD_MASK], &word, sizeof(u32));
+		break;
+
+	case DMAC_MDECin_MADR_ADDR:
+		bus->dmac.channels[DMAC_CH_MDECin].madr = word;
+		break;
+
+	case DMAC_MDECin_BCR_ADDR:
+		bus->dmac.channels[DMAC_CH_MDECin].bcr = word;
+		break;
+
+	case DMAC_MDECin_CHCR_ADDR:
+		bus->dmac.channels[DMAC_CH_MDECin].chcr = word;
+		break;
+
+	case DMAC_MDECout_MADR_ADDR:
+		bus->dmac.channels[DMAC_CH_MDECout].madr = word;
+		break;
+
+	case DMAC_MDECout_BCR_ADDR:
+		bus->dmac.channels[DMAC_CH_MDECout].bcr = word;
+		break;
+
+	case DMAC_MDECout_CHCR_ADDR:
+		bus->dmac.channels[DMAC_CH_MDECout].chcr = word;
+		break;
+
+	case DMAC_GPU_MADR_ADDR:
+		bus->dmac.channels[DMAC_CH_GPU].madr = word;
+		break;
+
+	case DMAC_GPU_BCR_ADDR:
+		bus->dmac.channels[DMAC_CH_GPU].bcr = word;
+		break;
+
+	case DMAC_GPU_CHCR_ADDR:
+		bus->dmac.channels[DMAC_CH_GPU].chcr = word;
+		break;
+
+	case DMAC_CDROM_MADR_ADDR:
+		bus->dmac.channels[DMAC_CH_CDROM].madr = word;
+		break;
+
+	case DMAC_CDROM_BCR_ADDR:
+		bus->dmac.channels[DMAC_CH_CDROM].bcr = word;
+		break;
+
+	case DMAC_CDROM_CHCR_ADDR:
+		bus->dmac.channels[DMAC_CH_CDROM].chcr = word;
+		break;
+
+	case DMAC_SPU_MADR_ADDR:
+		bus->dmac.channels[DMAC_CH_SPU].madr = word;
+		break;
+
+	case DMAC_SPU_BCR_ADDR:
+		bus->dmac.channels[DMAC_CH_SPU].bcr = word;
+		break;
+
+	case DMAC_SPU_CHCR_ADDR:
+		bus->dmac.channels[DMAC_CH_SPU].chcr = word;
+		break;
+
+	case DMAC_PIO_MADR_ADDR:
+		bus->dmac.channels[DMAC_CH_PIO].madr = word;
+		break;
+
+	case DMAC_PIO_BCR_ADDR:
+		bus->dmac.channels[DMAC_CH_PIO].bcr = word;
+		break;
+
+	case DMAC_PIO_CHCR_ADDR:
+		bus->dmac.channels[DMAC_CH_PIO].chcr = word;
+		break;
+
+	case DMAC_DPCR_ADDR:
+		bus->dmac.dpcr = word;
+		break;
+
+	case DMAC_DICR_ADDR:
+		bus->dmac.dicr = word;
+		break;
+
+	case I_STAT_ADDR:
+		bus->i_stat &= word;
+		break;
+
+	case I_MASK_ADDR:
+		bus->i_mask = word;
+		break;
+
+	case GPU_GP1_WRITE_ADDR:
+		gpu_gp1(&bus->gpu, word);
 		break;
 
 	default:

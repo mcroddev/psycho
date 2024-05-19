@@ -22,38 +22,39 @@
 
 #pragma once
 
-#include "dbg_log.h"
-#include "dmac.h"
-#include "gpu.h"
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
+
+#include "types.h"
 
 // clang-format off
 
-#define PSYCHO_BUS_RAM_BEG	(0x00000000)
-#define PSYCHO_BUS_RAM_END	(0x00200000)
-#define PSYCHO_BUS_RAM_SIZE	((PSYCHO_BUS_RAM_END - PSYCHO_BUS_RAM_BEG) - 1)
-
-#define PSYCHO_BUS_SPAD_BEG	(0x1F800000)
-#define PSYCHO_BUS_SPAD_END	(0x1F8003FF)
-#define PSYCHO_BUS_SPAD_SIZE	((PSYCHO_BUS_SPAD_END - PSYCHO_BUS_SPAD_BEG) - 1)
-
-#define PSYCHO_BUS_BIOS_BEG	(0x1FC00000)
-#define PSYCHO_BUS_BIOS_END	(0x1FC7FFFF)
-#define PSYCHO_BUS_BIOS_SIZE	((PSYCHO_BUS_BIOS_END - PSYCHO_BUS_BIOS_BEG) - 1)
+#define PSYCHO_DMAC_NUM_CHANNELS	(7)
 
 // clang-format on
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
-struct psycho_bus {
-	u8 bios[PSYCHO_BUS_BIOS_SIZE];
-	u8 spad[PSYCHO_BUS_SPAD_SIZE];
-	struct psycho_dbg_log *log;
-	u8 *ram;
+struct psycho_dmac_channel {
+	/// @brief DMA base address (R/W)
+	u32 madr;
 
-	struct psycho_dmac dmac;
-	struct psycho_gpu gpu;
+	/// @brief DMA block control (R/W)
+	u32 bcr;
 
-	u32 i_mask;
-	u32 i_stat;
+	/// @brief DMA channel channel (R/W)
+	u32 chcr;
 };
-#pragma GCC diagnostic pop
+
+struct psycho_dmac {
+	struct psycho_dmac_channel channels[PSYCHO_DMAC_NUM_CHANNELS];
+
+	/// @brief DMA control register (R/W)
+	u32 dpcr;
+
+	/// @brief DMA interrupt register (R/W)
+	u32 dicr;
+};
+
+#ifdef __cplusplus
+}
+#endif // __cplusplus

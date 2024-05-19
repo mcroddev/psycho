@@ -20,40 +20,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-#pragma once
-
-#include "dbg_log.h"
-#include "dmac.h"
+#include "compiler.h"
 #include "gpu.h"
+#include "dbg_log.h"
 
 // clang-format off
 
-#define PSYCHO_BUS_RAM_BEG	(0x00000000)
-#define PSYCHO_BUS_RAM_END	(0x00200000)
-#define PSYCHO_BUS_RAM_SIZE	((PSYCHO_BUS_RAM_END - PSYCHO_BUS_RAM_BEG) - 1)
+#define GP01_CMD	(24)
+#define GP01_PARAM	(0x00FFFFFF)
 
-#define PSYCHO_BUS_SPAD_BEG	(0x1F800000)
-#define PSYCHO_BUS_SPAD_END	(0x1F8003FF)
-#define PSYCHO_BUS_SPAD_SIZE	((PSYCHO_BUS_SPAD_END - PSYCHO_BUS_SPAD_BEG) - 1)
+#define GP1_CMD_RESET		(0x00)
+#define GP1_CMD_DMA_DIR		(0x04)
 
-#define PSYCHO_BUS_BIOS_BEG	(0x1FC00000)
-#define PSYCHO_BUS_BIOS_END	(0x1FC7FFFF)
-#define PSYCHO_BUS_BIOS_SIZE	((PSYCHO_BUS_BIOS_END - PSYCHO_BUS_BIOS_BEG) - 1)
+#define GPUSTAT_DISP_EN	(1U << 23)
+#define GPUSTAT_IRQ	(1U << 24)
+
+#define GPUSTAT_DMA_DIR_MASK	((1U << 29) | (1U << 30))
+
+#define GPUSTAT_RESET_VAL	(0x14802000)
 
 // clang-format on
 
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
-struct psycho_bus {
-	u8 bios[PSYCHO_BUS_BIOS_SIZE];
-	u8 spad[PSYCHO_BUS_SPAD_SIZE];
-	struct psycho_dbg_log *log;
-	u8 *ram;
+static void fifo_clear(struct psycho_gpu *const gpu)
+{
+	(void)gpu;
+}
 
-	struct psycho_dmac dmac;
-	struct psycho_gpu gpu;
+void gpu_gp1(struct psycho_gpu *const gpu, const u32 packet)
+{
+	switch (packet >> GP01_CMD) {
+	case GP1_CMD_RESET:
+		fifo_clear(gpu);
+		gpu->gpustat = GPUSTAT_RESET_VAL;
 
-	u32 i_mask;
-	u32 i_stat;
-};
-#pragma GCC diagnostic pop
+		break;
+
+	case GP1_CMD_DMA_DIR:
+		gpu->gpustat = (gpu->gpustat & ~GPUSTAT_DMA_DIR_MASK) |
+			       ((packet & GP01_PARAM) & GPUSTAT_DMA_DIR_MASK);
+
+		LOG_TRACE(gpu->log, "DMA direction changed");
+		break;
+
+	default:
+		LOG_WARN(gpu->log,
+			 "Unknown GPU GP1 packet (cmd=0x%02X, param=0x%05X)",
+			 packet >> GP01_CMD, packet & GP01_PARAM);
+		break;
+	}
+}

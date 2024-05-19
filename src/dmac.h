@@ -22,38 +22,37 @@
 
 #pragma once
 
-#include "dbg_log.h"
-#include "dmac.h"
-#include "gpu.h"
-
 // clang-format off
 
-#define PSYCHO_BUS_RAM_BEG	(0x00000000)
-#define PSYCHO_BUS_RAM_END	(0x00200000)
-#define PSYCHO_BUS_RAM_SIZE	((PSYCHO_BUS_RAM_END - PSYCHO_BUS_RAM_BEG) - 1)
+#define DMAC_MDECin_MADR_ADDR	(0x1F801080)
+#define DMAC_MDECin_BCR_ADDR	(0x1F801084)
+#define DMAC_MDECin_CHCR_ADDR	(0x1F801088)
+#define DMAC_MDECout_MADR_ADDR	(0x1F801090)
+#define DMAC_MDECout_BCR_ADDR	(0x1F801094)
+#define DMAC_MDECout_CHCR_ADDR	(0x1F801098)
+#define DMAC_GPU_MADR_ADDR	(0x1F8010A0)
+#define DMAC_GPU_BCR_ADDR	(0x1F8010A4)
+#define DMAC_GPU_CHCR_ADDR	(0x1F8010A8)
+#define DMAC_CDROM_MADR_ADDR	(0x1F8010B0)
+#define DMAC_CDROM_BCR_ADDR	(0x1F8010B4)
+#define DMAC_CDROM_CHCR_ADDR	(0x1F8010B8)
+#define DMAC_SPU_MADR_ADDR	(0x1F8010C0)
+#define DMAC_SPU_BCR_ADDR	(0x1F8010C4)
+#define DMAC_SPU_CHCR_ADDR	(0x1F8010C8)
+#define DMAC_PIO_MADR_ADDR	(0x1F8010D0)
+#define DMAC_PIO_BCR_ADDR	(0x1F8010D4)
+#define DMAC_PIO_CHCR_ADDR	(0x1F8010D8)
+#define DMAC_OTC_MADR_ADDR	(0x1F8010E0)
+#define DMAC_OTC_BCR_ADDR	(0x1F8010E4)
+#define DMAC_OTC_CHCR_ADDR	(0x1F8010E8)
+#define DMAC_DPCR_ADDR		(0x1F8010F0)
+#define DMAC_DICR_ADDR		(0x1F8010F4)
 
-#define PSYCHO_BUS_SPAD_BEG	(0x1F800000)
-#define PSYCHO_BUS_SPAD_END	(0x1F8003FF)
-#define PSYCHO_BUS_SPAD_SIZE	((PSYCHO_BUS_SPAD_END - PSYCHO_BUS_SPAD_BEG) - 1)
-
-#define PSYCHO_BUS_BIOS_BEG	(0x1FC00000)
-#define PSYCHO_BUS_BIOS_END	(0x1FC7FFFF)
-#define PSYCHO_BUS_BIOS_SIZE	((PSYCHO_BUS_BIOS_END - PSYCHO_BUS_BIOS_BEG) - 1)
+#define DMAC_CH_MDECin	(0)
+#define DMAC_CH_MDECout	(1)
+#define DMAC_CH_GPU	(2)
+#define DMAC_CH_CDROM	(3)
+#define DMAC_CH_SPU	(4)
+#define DMAC_CH_PIO	(5)
 
 // clang-format on
-
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wpadded"
-struct psycho_bus {
-	u8 bios[PSYCHO_BUS_BIOS_SIZE];
-	u8 spad[PSYCHO_BUS_SPAD_SIZE];
-	struct psycho_dbg_log *log;
-	u8 *ram;
-
-	struct psycho_dmac dmac;
-	struct psycho_gpu gpu;
-
-	u32 i_mask;
-	u32 i_stat;
-};
-#pragma GCC diagnostic pop
