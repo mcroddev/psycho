@@ -29,6 +29,8 @@
 #define GP01_CMD	(24)
 #define GP01_PARAM	(0x00FFFFFF)
 
+#define GP0_CMD_DRAW_MODE	(0xE1)
+
 #define GP1_CMD_RESET		(0x00)
 #define GP1_CMD_DMA_DIR		(0x04)
 
@@ -46,12 +48,31 @@ static void fifo_clear(struct psycho_gpu *const gpu)
 	(void)gpu;
 }
 
+void gpu_gp0(struct psycho_gpu *const gpu, const u32 packet)
+{
+	const uint cmd = packet >> GP01_CMD;
+	const uint params = packet & GP01_PARAM;
+
+	switch (cmd) {
+	case GP0_CMD_DRAW_MODE:
+		LOG_DBG(gpu->log, "Draw mode setting changed");
+		break;
+
+	default:
+		LOG_WARN(gpu->log,
+			 "Unknown GPU GP0 packet (cmd=0x%02X, param=0x%05X)",
+			 cmd, params);
+		break;
+	}
+}
+
 void gpu_gp1(struct psycho_gpu *const gpu, const u32 packet)
 {
 	switch (packet >> GP01_CMD) {
 	case GP1_CMD_RESET:
 		fifo_clear(gpu);
 		gpu->gpustat = GPUSTAT_RESET_VAL;
+		LOG_DBG(gpu->log, "GPU reset via GP1");
 
 		break;
 
@@ -59,7 +80,7 @@ void gpu_gp1(struct psycho_gpu *const gpu, const u32 packet)
 		gpu->gpustat = (gpu->gpustat & ~GPUSTAT_DMA_DIR_MASK) |
 			       ((packet & GP01_PARAM) & GPUSTAT_DMA_DIR_MASK);
 
-		LOG_TRACE(gpu->log, "DMA direction changed");
+		LOG_DBG(gpu->log, "DMA direction changed");
 		break;
 
 	default:

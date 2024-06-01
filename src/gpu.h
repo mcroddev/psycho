@@ -26,8 +26,12 @@
 
 // clang-format off
 
+#define GPU_GPUSTAT_READ_ADDR	(0x1F801814)
+
+#define GPU_GP0_WRITE_ADDR	(0x1F801810)
 #define GPU_GP1_WRITE_ADDR	(0x1F801814)
 
 // clang-format on
 
+void gpu_gp0(struct psycho_gpu *gpu, u32 packet);
 void gpu_gp1(struct psycho_gpu *gpu, u32 packet);

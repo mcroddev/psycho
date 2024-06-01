@@ -73,6 +73,10 @@ u32 bus_lw(const struct psycho_bus *const bus, const u32 paddr)
 		word = bus->i_mask;
 		break;
 
+	case GPU_GPUSTAT_READ_ADDR:
+		word = bus->gpu.gpustat;
+		break;
+
 	case BIOS_BEG ... BIOS_END:
 		memcpy(&word, &bus->bios[paddr & BIOS_MASK], sizeof(u32));
 		break;
@@ -240,6 +244,10 @@ void bus_sw(struct psycho_bus *const bus, const u32 paddr, const u32 word)
 
 	case I_MASK_ADDR:
 		bus->i_mask = word;
+		break;
+
+	case GPU_GP0_WRITE_ADDR:
+		gpu_gp0(&bus->gpu, word);
 		break;
 
 	case GPU_GP1_WRITE_ADDR:
