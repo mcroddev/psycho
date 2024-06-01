@@ -76,6 +76,7 @@ void psycho_ctx_init(struct psycho_ctx *const ctx, u8 *const ram)
 	ctx->bus.ram = ram;
 
 	ctx->bus.gpu.log = &ctx->log;
+	ctx->bus.dmac.log = &ctx->log;
 
 	psycho_ctx_reset(ctx);
 	LOG_INFO(&ctx->log, "System initialized!");

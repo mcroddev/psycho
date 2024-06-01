@@ -231,7 +231,7 @@ void bus_sw(struct psycho_bus *const bus, const u32 paddr, const u32 word)
 		break;
 
 	case DMAC_DPCR_ADDR:
-		bus->dmac.dpcr = word;
+		dmac_dpcr_set(&bus->dmac, word);
 		break;
 
 	case DMAC_DICR_ADDR:

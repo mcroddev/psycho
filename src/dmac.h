@@ -22,6 +22,8 @@
 
 #pragma once
 
+#include "psycho/dmac.h"
+
 // clang-format off
 
 #define DMAC_MDECin_MADR_ADDR	(0x1F801080)
@@ -56,3 +58,5 @@
 #define DMAC_CH_PIO	(5)
 
 // clang-format on
+
+void dmac_dpcr_set(struct psycho_dmac *dmac, u32 dpcr);

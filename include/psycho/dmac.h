@@ -48,6 +48,8 @@ struct psycho_dmac_channel {
 struct psycho_dmac {
 	struct psycho_dmac_channel channels[PSYCHO_DMAC_NUM_CHANNELS];
 
+	struct psycho_dbg_log *log;
+
 	/// @brief DMA control register (R/W)
 	u32 dpcr;
 
