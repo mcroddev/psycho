@@ -20,27 +20,13 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-set(SRCS bus.c cpu.c ctx.c log.c)
+set(SRCS main.c)
 
-set(HDRS_PUBLIC
-	include/core/bus.h
-	include/core/cpu.h
-	include/core/ctx.h
-	include/core/log.h
-	include/core/types.h
-)
+add_executable(psycho ${SRCS})
+target_link_libraries(psycho PRIVATE core)
 
-add_library(core STATIC ${SRCS} ${HDRS_PUBLIC})
-target_include_directories(core PUBLIC include)
-target_link_libraries(core PRIVATE psycho_cfg_base_c)
-
-# Unfortunately, interface targets do not propagate a desired language standard.
-# We have no choice but to leave it to individual targets to set the project
-# wide standard correctly.
-#
-# See: https://discourse.cmake.org/t/setting-c-standard-on-interface-libraries/10933/3
 set_target_properties(
-	core PROPERTIES
+	psycho PROPERTIES
 	C_STANDARD 17
 	C_STANDARD_REQUIRED ON
 	C_EXTENSIONS ON

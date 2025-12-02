@@ -21,7 +21,27 @@
 // SOFTWARE.
 
 #include "core/ctx.h"
+#include "cpu.h"
+#include "log.h"
+
+LOG_MODULE(PSYCHO_LOG_MODULE_ID_CTX);
 
 void psycho_ctx_init(struct psycho_ctx *const ctx)
 {
+	psycho_ctx_reset(ctx);
+}
+
+void psycho_ctx_reset(struct psycho_ctx *const ctx)
+{
+	psycho_cpu_reset(ctx);
+}
+
+void psycho_ctx_bios_data_set(struct psycho_ctx *ctx, u8 *const data)
+{
+	ctx->bus.bios = data;
+}
+
+bool psycho_ctx_step(struct psycho_ctx *const ctx)
+{
+	return psycho_cpu_step(ctx);
 }

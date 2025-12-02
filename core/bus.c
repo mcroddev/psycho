@@ -20,33 +20,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/** @file ctx.h Defines the interface to a psycho emulator context. */
-
-#pragma once
-
-#ifdef __cplusplus
-extern "C" {
-#endif // __cplusplus
-
-#include <stdbool.h>
+#include <string.h>
 
 #include "bus.h"
-#include "cpu.h"
-#include "log.h"
 
-struct psycho_ctx {
-	struct psycho_bus bus;
-	struct psycho_cpu cpu;
-	struct psycho_log log;
-};
+u32 psycho_bus_load_word(struct psycho_ctx *const ctx, const u32 paddr)
+{
+	u32 word;
 
-void psycho_ctx_init(struct psycho_ctx *ctx);
+	switch (paddr) {
+	case 0x1FC00000 ... 0x1FC7FFFF:
+		memcpy(&word, &ctx->bus.bios[paddr & 0x000FFFFF], sizeof(u32));
+		return word;
 
-void psycho_ctx_reset(struct psycho_ctx *ctx);
-
-void psycho_ctx_bios_data_set(struct psycho_ctx *ctx, u8 *data);
-bool psycho_ctx_step(struct psycho_ctx *ctx);
-
-#ifdef __cplusplus
+	default:
+		return 0xFFFFFFFF;
+	}
 }
-#endif // __cplusplus

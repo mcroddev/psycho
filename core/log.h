@@ -20,32 +20,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/** @file ctx.h Defines the interface to a psycho emulator context. */
-
 #pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
-#include <stdbool.h>
+#include "core/log.h"
 
-#include "bus.h"
-#include "cpu.h"
-#include "log.h"
+#define LOG_MODULE(x) static const enum psycho_log_module_id m_log_module = (x)
 
-struct psycho_ctx {
-	struct psycho_bus bus;
-	struct psycho_cpu cpu;
-	struct psycho_log log;
-};
+#define LOG_HANDLE(ctx, lvl, args...)                                    \
+	({                                                               \
+		struct psycho_ctx *m_ctx = (ctx);                        \
+                                                                         \
+		if ((m_ctx->log.msg_cb_func) &&                          \
+		    (m_ctx->log.modules[m_log_module].level >= (lvl)))   \
+			psycho_log_message_dispatch(m_ctx, m_log_module, \
+						    (lvl), args);        \
+	})
 
-void psycho_ctx_init(struct psycho_ctx *ctx);
+#define LOG_INFO(ctx, args...) LOG_HANDLE((ctx), PSYCHO_LOG_LEVEL_INFO, args)
+#define LOG_WARN(ctx, args...) LOG_HANDLE((ctx), PSYCHO_LOG_LEVEL_WARN, args)
+#define LOG_ERROR(ctx, args...) LOG_HANDLE((ctx), PSYCHO_LOG_LEVEL_ERROR, args)
+#define LOG_DEBUG(ctx, args...) LOG_HANDLE((ctx), PSYCHO_LOG_LEVEL_DEBUG, args)
+#define LOG_TRACE(ctx, args...) LOG_HANDLE((ctx), PSYCHO_LOG_LEVEL_TRACE, args)
 
-void psycho_ctx_reset(struct psycho_ctx *ctx);
-
-void psycho_ctx_bios_data_set(struct psycho_ctx *ctx, u8 *data);
-bool psycho_ctx_step(struct psycho_ctx *ctx);
+void psycho_log_message_dispatch(struct psycho_ctx *ctx,
+				 enum psycho_log_module_id id,
+				 enum psycho_log_level level, const char *str,
+				 ...);
 
 #ifdef __cplusplus
 }

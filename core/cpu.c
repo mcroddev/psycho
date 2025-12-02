@@ -20,33 +20,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/** @file ctx.h Defines the interface to a psycho emulator context. */
-
-#pragma once
-
-#ifdef __cplusplus
-extern "C" {
-#endif // __cplusplus
-
-#include <stdbool.h>
-
-#include "bus.h"
 #include "cpu.h"
+#include "cpu-defs.h"
+#include "bus.h"
 #include "log.h"
 
-struct psycho_ctx {
-	struct psycho_bus bus;
-	struct psycho_cpu cpu;
-	struct psycho_log log;
-};
+LOG_MODULE(PSYCHO_LOG_MODULE_ID_CPU);
 
-void psycho_ctx_init(struct psycho_ctx *ctx);
-
-void psycho_ctx_reset(struct psycho_ctx *ctx);
-
-void psycho_ctx_bios_data_set(struct psycho_ctx *ctx, u8 *data);
-bool psycho_ctx_step(struct psycho_ctx *ctx);
-
-#ifdef __cplusplus
+static u32 translate_vaddr_to_paddr(const u32 vaddr)
+{
+	return vaddr & 0x1FFFFFFF;
 }
-#endif // __cplusplus
+
+void psycho_cpu_reset(struct psycho_ctx *const ctx)
+{
+	ctx->cpu.reg.pc = RESET_PC;
+}
+
+bool psycho_cpu_step(struct psycho_ctx *ctx)
+{
+	const u32 paddr = translate_vaddr_to_paddr(ctx->cpu.reg.pc);
+	const u32 instr = psycho_bus_load_word(ctx, paddr);
+
+	switch (instr) {
+	default:
+		LOG_ERROR(ctx, "Unhandled instruction: 0x%08X", instr);
+		return false;
+	}
+	return true;
+}

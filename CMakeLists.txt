@@ -185,4 +185,6 @@ function(psycho_configure_base_settings_c)
 endfunction()
 
 psycho_configure_base_settings_c()
+
 add_subdirectory(core)
+add_subdirectory(app)
