@@ -69,55 +69,35 @@ function(psycho_configure_base_settings_c)
 	# mind when updating this list.
 	set(COMPILE_FLAGS
 		-Wall
-		-Walloc-zero
 		-Walloca
 		-Wbad-function-cast
 		-Wcast-qual
 		-Wdate-time
 		-Wdisabled-optimization
 		-Wdouble-promotion
-		-Wduplicated-branches
-		-Wduplicated-cond
 		-Wextra
 		-Wfloat-equal
-		-Wformat-overflow=2
-		-Wformat-signedness
-		-Wformat-truncation=2
 		-Wformat=2
 		-Winit-self
 		-Winline
 		-Winvalid-pch
-		-Wjump-misses-init
-		-Wlogical-op
 		-Wmain
 		-Wmissing-declarations
 		-Wmissing-include-dirs
 		-Wmissing-noreturn
 		-Wmissing-prototypes
 		-Wnested-externs
-		-Wno-aggressive-loop-optimizations
 		-Wnull-dereference
 		-Wold-style-definition
 		-Wpacked
 		-Wredundant-decls
 		-Wshadow
-		-Wshift-overflow=2
 		-Wstrict-prototypes
-		-Wsuggest-attribute=cold
-		-Wsuggest-attribute=const
-		-Wsuggest-attribute=format
-		-Wsuggest-attribute=malloc
-		-Wsuggest-attribute=noreturn
-		-Wsuggest-attribute=pure
 		-Wswitch-default
 		-Wswitch-enum
-		-Wsync-nand
-		-Wtrampolines
 		-Wundef
 		-Wuninitialized
 		-Wunknown-pragmas
-		-Wunsafe-loop-optimizations
-		-Wunsuffixed-float-constants
 		-Wunused-macros
 		-Wvla
 		-Wwrite-strings
@@ -130,7 +110,30 @@ function(psycho_configure_base_settings_c)
 
 		# These flags are only supported by gcc and are set regardless
 		# of the build type.
-		set(GCC_BUILD_FLAGS)
+		set(GCC_BUILD_FLAGS
+			-Walloc-zero
+			-Wduplicated-branches
+			-Wduplicated-cond
+			-Wformat-overflow=2
+			-Wformat-signedness
+			-Wformat-truncation=2
+			-Wjump-misses-init
+			-Wlogical-op
+			-Wno-aggressive-loop-optimizations
+			-Wshift-overflow=2
+			-Wsuggest-attribute=cold
+			-Wsuggest-attribute=const
+			-Wsuggest-attribute=format
+			-Wsuggest-attribute=malloc
+			-Wsuggest-attribute=noreturn
+			-Wsuggest-attribute=pure
+			-Wsync-nand
+			-Wtrampolines
+			-Wunsafe-loop-optimizations
+			-Wunsuffixed-float-constants
+		)
+
+		list(APPEND COMPILE_FLAGS ${GCC_BUILD_FLAGS})
 	elseif (CMAKE_C_COMPILER_ID MATCHES "Clang")
 		if (CMAKE_C_COMPILER_VERSION LESS ${CLANG_VER_MIN})
 			error_unsupported_compiler()
