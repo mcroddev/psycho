@@ -33,6 +33,7 @@
 extern "C" {
 #endif // __cplusplus
 
+#include <stdbool.h>
 #include <stddef.h>
 
 struct psycho_ctx;
@@ -60,6 +61,8 @@ enum psycho_log_level {
 enum psycho_log_module_id {
 	PSYCHO_LOG_MODULE_ID_CTX,
 	PSYCHO_LOG_MODULE_ID_CPU,
+	PSYCHO_LOG_MODULE_ID_DISASM,
+	PSYCHO_LOG_MODULE_ID_BUS,
 	PSYCHO_LOG_MODULE_ID_NUM
 };
 
@@ -79,11 +82,17 @@ typedef void (*on_log_msg_cb)(struct psycho_ctx *,
 			      const struct psycho_log_msg *);
 
 struct psycho_log {
-	on_log_msg_cb msg_cb_func;
+	bool enabled;
 	struct psycho_log_module modules[PSYCHO_LOG_MODULE_ID_NUM];
 };
 
-void psycho_log_enable(struct psycho_ctx *ctx, on_log_msg_cb cb);
+/**
+ * @brief Enables or disables logging.
+ *
+ * @param ctx The target psycho_ctx emulator context.
+ * @param enable `true` to enable logging, `false` to disable it.
+ */
+void psycho_log_enable(struct psycho_ctx *ctx, bool enable);
 
 /**
  * @brief Applies the desired log level to all modules.

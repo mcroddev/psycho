@@ -22,12 +22,18 @@
 
 #include "core/ctx.h"
 #include "cpu.h"
+#include "disasm.h"
 #include "log.h"
 
 LOG_MODULE(PSYCHO_LOG_MODULE_ID_CTX);
 
-void psycho_ctx_init(struct psycho_ctx *const ctx)
+void psycho_ctx_init(struct psycho_ctx *const ctx,
+		     const struct psycho_ctx_cfg *const cfg)
 {
+	ctx->bus.bios = cfg->bios_data;
+	ctx->bus.ram = cfg->ram_data;
+	ctx->event_cb = cfg->event_cb;
+
 	psycho_ctx_reset(ctx);
 }
 
@@ -36,12 +42,13 @@ void psycho_ctx_reset(struct psycho_ctx *const ctx)
 	psycho_cpu_reset(ctx);
 }
 
-void psycho_ctx_bios_data_set(struct psycho_ctx *ctx, u8 *const data)
+void psycho_ctx_step(struct psycho_ctx *const ctx)
 {
-	ctx->bus.bios = data;
-}
+	if (ctx->disasm.trace_instruction)
+		psycho_disasm_trace_begin(ctx);
 
-bool psycho_ctx_step(struct psycho_ctx *const ctx)
-{
-	return psycho_cpu_step(ctx);
+	psycho_cpu_step(ctx);
+
+	if (ctx->disasm.trace_instruction)
+		psycho_disasm_trace_end(ctx);
 }

@@ -26,14 +26,19 @@
 extern "C" {
 #endif // __cplusplus
 
+#include "cpu-defs.h"
 #include "types.h"
 
 struct psycho_ctx;
 
 struct psycho_cpu {
-	struct {
-		u32 pc;
-	} reg;
+	u32 gpr[PSYCHO_CPU_GPR_NUM];
+	u32 cop0[PSYCHO_CPU_COP0_REG_NUM];
+	u32 alu_hi;
+	u32 alu_lo;
+	u32 pc;
+	u32 next_pc;
+	u32 instr;
 };
 
 #ifdef __cplusplus

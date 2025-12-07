@@ -26,3 +26,8 @@
 #include "core/ctx.h"
 
 u32 psycho_bus_load_word(struct psycho_ctx *ctx, u32 paddr);
+u8 psycho_bus_load_byte(struct psycho_ctx *ctx, u32 paddr);
+
+void psycho_bus_store_word(struct psycho_ctx *ctx, u32 paddr, u32 word);
+void psycho_bus_store_halfword(struct psycho_ctx *ctx, u32 paddr, u16 halfword);
+void psycho_bus_store_byte(struct psycho_ctx *ctx, u32 paddr, u8 byte);

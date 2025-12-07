@@ -20,7 +20,7 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-set(SRCS bus.c cpu.c ctx.c log.c)
+set(SRCS bus.c cpu.c ctx.c disasm.c log.c)
 
 set(HDRS_PUBLIC
 	include/core/bus.h

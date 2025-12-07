@@ -34,7 +34,7 @@ extern "C" {
 	({                                                               \
 		struct psycho_ctx *m_ctx = (ctx);                        \
                                                                          \
-		if ((m_ctx->log.msg_cb_func) &&                          \
+		if ((m_ctx->log.enabled) &&                              \
 		    (m_ctx->log.modules[m_log_module].level >= (lvl)))   \
 			psycho_log_message_dispatch(m_ctx, m_log_module, \
 						    (lvl), args);        \

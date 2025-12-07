@@ -20,49 +20,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/**
- * @file types.h Defines integer types.
- *
- * These fixed-width integer types are exactly the same as the fixed-width
- * integer types provided by `stdint.h`, but the names are shortened for
- * brevity.
- */
-
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif // __cplusplus
+#include <stdbool.h>
+#include <stddef.h>
 
-#include <stdint.h>
+#include "types.h"
 
-/** Unsigned 64-bit integer */
-typedef uint64_t u64;
+struct psycho_ctx;
 
-/** Signed 64-bit integer */
-typedef int64_t s64;
+enum {
+	PSYCHO_DISASM_LEN_MAX = 256,
+};
 
-/** Unsigned 32-bit integer */
-typedef uint32_t u32;
+struct psycho_disasm {
+	struct {
+		char str[PSYCHO_DISASM_LEN_MAX];
+		u32 pc;
+		size_t len;
+	} result;
 
-/** Signed 32-bit integer */
-typedef int32_t s32;
+	bool trace_instruction;
+};
 
-/** Unsigned 16-bit integer */
-typedef uint16_t u16;
-
-/** Signed 16-bit integer */
-typedef int16_t s16;
-
-/** Unsigned 8-bit integer */
-typedef uint8_t u8;
-
-/** Signed 8-bit integer */
-typedef int8_t s8;
-
-/** Unsigned integer */
-typedef unsigned int uint;
-
-#ifdef __cplusplus
-}
-#endif // __cplusplus
+void psycho_disasm_instr(struct psycho_ctx *ctx, u32 instr, u32 pc);
+void psycho_disasm_trace_instruction_enable(struct psycho_ctx *ctx, bool state);

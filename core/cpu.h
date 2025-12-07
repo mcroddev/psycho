@@ -27,4 +27,4 @@
 #include <stdbool.h>
 
 void psycho_cpu_reset(struct psycho_ctx *ctx);
-bool psycho_cpu_step(struct psycho_ctx *ctx);
+void psycho_cpu_step(struct psycho_ctx *ctx);

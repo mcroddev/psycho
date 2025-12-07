@@ -30,9 +30,24 @@ extern "C" {
 
 struct psycho_ctx;
 
+enum {
+	PSYCHO_RAM_ADDR_START = 0x00000000,
+	PSYCHO_RAM_ADDR_END = 0x00200000,
+	PSYCHO_RAM_SIZE = PSYCHO_RAM_ADDR_END - PSYCHO_RAM_ADDR_START,
+
+	PSYCHO_BIOS_ADDR_START = 0x1FC00000,
+	PSYCHO_BIOS_ADDR_END = 0x1FC7FFFF,
+	PSYCHO_BIOS_SIZE = PSYCHO_BIOS_ADDR_END - PSYCHO_BIOS_ADDR_START
+};
+
 struct psycho_bus {
 	u8 *bios;
+	u8 *ram;
 };
+
+void psycho_bus_bios_data_set(struct psycho_ctx *const ctx, u8 *const data);
+
+u32 psycho_bus_peek_word(struct psycho_ctx *ctx, const u32 paddr);
 
 #ifdef __cplusplus
 }

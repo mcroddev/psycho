@@ -29,17 +29,87 @@
 #include "core/ctx.h"
 #include "core/types.h"
 
-enum {
-	BIOS_SIZE = 524288,
-};
+//Regular bold text
+#define BBLK "\e[1;30m"
+#define BRED "\e[1;31m"
+#define BGRN "\e[1;32m"
+#define BYEL "\e[1;33m"
+#define BBLU "\e[1;34m"
+#define BMAG "\e[1;35m"
+#define BCYN "\e[1;36m"
+#define BWHT "\e[1;37m"
 
-static struct psycho_ctx ctx;
-static u8 bios_data[BIOS_SIZE];
+#define COLOR_RESET "\e[0m"
 
-static void on_log_msg(struct psycho_ctx *const ctx,
-		       const struct psycho_log_msg *const msg)
+struct {
+	u8 ram[PSYCHO_RAM_SIZE];
+	u8 bios[PSYCHO_BIOS_SIZE];
+	struct psycho_ctx ctx;
+} static emu;
+
+static void handle_cpu_illegal_instr(struct psycho_ctx *const ctx)
 {
-	printf("%s\n", msg->msg);
+	__builtin_trap();
+}
+
+static void handle_log_message(const struct psycho_log_msg *const msg)
+{
+	switch (msg->level) {
+	case PSYCHO_LOG_LEVEL_INFO:
+		printf(BWHT "%s\n" COLOR_RESET, msg->msg);
+		return;
+
+	case PSYCHO_LOG_LEVEL_WARN:
+		printf(BYEL "%s\n" COLOR_RESET, msg->msg);
+		return;
+
+	case PSYCHO_LOG_LEVEL_ERROR:
+		printf(BRED "%s\n" COLOR_RESET, msg->msg);
+		return;
+
+	default:
+		printf("%s\n", msg->msg);
+		return;
+	}
+}
+
+static void ctx_event_handle(struct psycho_ctx *const ctx,
+			     const enum psycho_ctx_event event,
+			     void *const data)
+{
+	switch (event) {
+	case PSYCHO_CTX_EVENT_CPU_ILLEGAL:
+		handle_cpu_illegal_instr(ctx);
+		return;
+
+	case PSYCHO_CTX_EVENT_LOG_MESSAGE:
+		handle_log_message(data);
+		return;
+
+	default:
+		UNREACHABLE;
+	}
+}
+
+static bool load_bios_file(const char *const bios_file)
+{
+	struct stat st;
+	if (stat(bios_file, &st) < 0)
+		return false;
+
+	FILE *bios_file_handle = fopen(bios_file, "rb");
+
+	if (!bios_file_handle)
+		return false;
+
+	const size_t bytes_read =
+		fread(emu.bios, sizeof(u8), sizeof(emu.bios), bios_file_handle);
+
+	if ((bytes_read != sizeof(emu.bios)) || (ferror(bios_file_handle))) {
+		fclose(bios_file_handle);
+		return false;
+	}
+	return true;
 }
 
 int main(int argc, char **argv)
@@ -51,40 +121,37 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
-	struct stat st;
-	if (stat(argv[1], &st) < 0) {
-		fprintf(stderr, "%s: failed to get file size of %s: %s",
+	if (!load_bios_file(argv[1])) {
+		fprintf(stderr,
+			"%s: error encountered loading bios file %s: %s\n",
 			argv[0], argv[1], strerror(errno));
 		return EXIT_FAILURE;
 	}
 
-	FILE *bios_file = fopen(argv[1], "rb");
+	static const struct psycho_ctx_cfg cfg = {
+		// clang-format off
 
-	if (!bios_file) {
-		fprintf(stderr, "%s: failed to open %s: %s\n", argv[0], argv[1],
-			strerror(errno));
-		return EXIT_FAILURE;
+		.event_cb	= ctx_event_handle,
+		.ram_data	= emu.ram,
+		.bios_data	= emu.bios,
+
+		// clang-format on
+	};
+
+	psycho_ctx_init(&emu.ctx, &cfg);
+
+	psycho_log_enable(&emu.ctx, true);
+	psycho_log_level_set_global(&emu.ctx, PSYCHO_LOG_LEVEL_TRACE);
+
+	psycho_disasm_trace_instruction_enable(&emu.ctx, true);
+
+	for (;;) {
+		fflush(stdout);
+
+		if (emu.ctx.cpu.pc == 0x80030000)
+			__builtin_trap();
+
+		psycho_ctx_step(&emu.ctx);
 	}
-
-	const size_t bytes_read =
-		fread(bios_data, sizeof(u8), BIOS_SIZE, bios_file);
-
-	if ((bytes_read != BIOS_SIZE) || (ferror(bios_file))) {
-		fprintf(stderr, "%s: error reading %s: %s\n", argv[0], argv[1],
-			strerror(errno));
-		fclose(bios_file);
-		return EXIT_FAILURE;
-	}
-
-	psycho_ctx_init(&ctx);
-	psycho_ctx_bios_data_set(&ctx, bios_data);
-
-	psycho_log_level_set_global(&ctx, PSYCHO_LOG_LEVEL_TRACE);
-	ctx.log.msg_cb_func = on_log_msg;
-
-	for (;;)
-		if (!psycho_ctx_step(&ctx))
-			abort();
-
 	return EXIT_FAILURE;
 }

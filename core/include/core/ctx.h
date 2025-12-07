@@ -32,20 +32,38 @@ extern "C" {
 
 #include "bus.h"
 #include "cpu.h"
+#include "disasm.h"
 #include "log.h"
+
+enum psycho_ctx_event {
+	/** @brief The CPU has executed an illegal instruction. */
+	PSYCHO_CTX_EVENT_CPU_ILLEGAL,
+
+	/** @brief A log message has been dispatched. */
+	PSYCHO_CTX_EVENT_LOG_MESSAGE
+};
+
+typedef void (*psycho_event_cb)(struct psycho_ctx *,
+				const enum psycho_ctx_event, void *);
+
+struct psycho_ctx_cfg {
+	psycho_event_cb event_cb;
+	u8 *ram_data;
+	u8 *bios_data;
+};
 
 struct psycho_ctx {
 	struct psycho_bus bus;
 	struct psycho_cpu cpu;
+	struct psycho_disasm disasm;
 	struct psycho_log log;
+
+	psycho_event_cb event_cb;
 };
 
-void psycho_ctx_init(struct psycho_ctx *ctx);
-
+void psycho_ctx_init(struct psycho_ctx *ctx, const struct psycho_ctx_cfg *cfg);
 void psycho_ctx_reset(struct psycho_ctx *ctx);
-
-void psycho_ctx_bios_data_set(struct psycho_ctx *ctx, u8 *data);
-bool psycho_ctx_step(struct psycho_ctx *ctx);
+void psycho_ctx_step(struct psycho_ctx *ctx);
 
 #ifdef __cplusplus
 }

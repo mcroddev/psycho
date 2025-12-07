@@ -45,10 +45,17 @@ static const char *const module_name[PSYCHO_LOG_MODULE_ID_NUM] = {
 	// clang-format off
 
 	[PSYCHO_LOG_MODULE_ID_CTX]	= "ctx",
-	[PSYCHO_LOG_MODULE_ID_CPU]	= "cpu"
+	[PSYCHO_LOG_MODULE_ID_CPU]	= "cpu",
+	[PSYCHO_LOG_MODULE_ID_DISASM]	= "disasm",
+	[PSYCHO_LOG_MODULE_ID_BUS]	= "bus"
 
 	// clang-format on
 };
+
+void psycho_log_enable(struct psycho_ctx *const ctx, const bool enable)
+{
+	ctx->log.enabled = enable;
+}
 
 void psycho_log_level_set_global(struct psycho_ctx *const ctx,
 				 const enum psycho_log_level level)
@@ -89,5 +96,5 @@ void psycho_log_message_dispatch(struct psycho_ctx *const ctx,
 	msg.id = id;
 	msg.level = level;
 
-	ctx->log.msg_cb_func(ctx, &msg);
+	ctx->event_cb(ctx, PSYCHO_CTX_EVENT_LOG_MESSAGE, &msg);
 }

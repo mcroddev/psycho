@@ -20,48 +20,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
-/**
- * @file types.h Defines integer types.
- *
- * These fixed-width integer types are exactly the same as the fixed-width
- * integer types provided by `stdint.h`, but the names are shortened for
- * brevity.
- */
-
 #pragma once
 
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
 
-#include <stdint.h>
+#define ALWAYS_INLINE __attribute__((always_inline)) static inline
+#define UNREACHABLE __builtin_unreachable()
 
-/** Unsigned 64-bit integer */
-typedef uint64_t u64;
-
-/** Signed 64-bit integer */
-typedef int64_t s64;
-
-/** Unsigned 32-bit integer */
-typedef uint32_t u32;
-
-/** Signed 32-bit integer */
-typedef int32_t s32;
-
-/** Unsigned 16-bit integer */
-typedef uint16_t u16;
-
-/** Signed 16-bit integer */
-typedef int16_t s16;
-
-/** Unsigned 8-bit integer */
-typedef uint8_t u8;
-
-/** Signed 8-bit integer */
-typedef int8_t s8;
-
-/** Unsigned integer */
-typedef unsigned int uint;
+#define likely(x) __builtin_expect(!!(x), 1)
+#define unlikely(x) __builtin_expect(!!(x), 0)
 
 #ifdef __cplusplus
 }
