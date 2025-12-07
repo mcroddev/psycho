@@ -27,11 +27,6 @@
 
 LOG_MODULE(PSYCHO_LOG_MODULE_ID_BUS);
 
-void psycho_bus_bios_data_set(struct psycho_ctx *const ctx, u8 *const data)
-{
-	ctx->bus.bios = data;
-}
-
 u32 psycho_bus_peek_word(struct psycho_ctx *const ctx, const u32 paddr)
 {
 	return psycho_bus_load_word(ctx, paddr);

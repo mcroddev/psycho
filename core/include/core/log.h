@@ -82,17 +82,8 @@ typedef void (*on_log_msg_cb)(struct psycho_ctx *,
 			      const struct psycho_log_msg *);
 
 struct psycho_log {
-	bool enabled;
-	struct psycho_log_module modules[PSYCHO_LOG_MODULE_ID_NUM];
+	enum psycho_log_level modules[PSYCHO_LOG_MODULE_ID_NUM];
 };
-
-/**
- * @brief Enables or disables logging.
- *
- * @param ctx The target psycho_ctx emulator context.
- * @param enable `true` to enable logging, `false` to disable it.
- */
-void psycho_log_enable(struct psycho_ctx *ctx, bool enable);
 
 /**
  * @brief Applies the desired log level to all modules.

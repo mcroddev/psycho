@@ -52,23 +52,18 @@ static const char *const module_name[PSYCHO_LOG_MODULE_ID_NUM] = {
 	// clang-format on
 };
 
-void psycho_log_enable(struct psycho_ctx *const ctx, const bool enable)
-{
-	ctx->log.enabled = enable;
-}
-
 void psycho_log_level_set_global(struct psycho_ctx *const ctx,
 				 const enum psycho_log_level level)
 {
 	for (size_t i = 0; i < PSYCHO_LOG_MODULE_ID_NUM; ++i)
-		ctx->log.modules[i].level = level;
+		ctx->log.modules[i] = level;
 }
 
 void psycho_log_module_level_set(struct psycho_ctx *const ctx,
 				 const enum psycho_log_module_id id,
 				 const enum psycho_log_level level)
 {
-	ctx->log.modules[id].level = level;
+	ctx->log.modules[id] = level;
 }
 
 void psycho_log_message_dispatch(struct psycho_ctx *const ctx,
@@ -76,22 +71,22 @@ void psycho_log_message_dispatch(struct psycho_ctx *const ctx,
 				 const enum psycho_log_level level,
 				 const char *const str, ...)
 {
-	va_list args;
-	va_start(args, str);
-
 	struct psycho_log_msg msg;
 
 	msg.msg_len = sprintf(msg.msg, "[%s/%s] ", log_level_name[level],
 			      module_name[id]);
 
+	va_list args;
+	va_start(args, str);
+
 	const int num_chars =
 		vsnprintf(&msg.msg[msg.msg_len], sizeof(msg.msg), str, args);
+
+	va_end(args);
 
 	assert(num_chars < PSYCHO_LOG_MSG_SIZE_MAX);
 
 	msg.msg_len += num_chars;
-
-	va_end(args);
 
 	msg.id = id;
 	msg.level = level;

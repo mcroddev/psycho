@@ -45,8 +45,6 @@ struct psycho_bus {
 	u8 *ram;
 };
 
-void psycho_bus_bios_data_set(struct psycho_ctx *const ctx, u8 *const data);
-
 u32 psycho_bus_peek_word(struct psycho_ctx *ctx, const u32 paddr);
 
 #ifdef __cplusplus

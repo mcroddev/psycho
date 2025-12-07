@@ -139,15 +139,11 @@ int main(int argc, char **argv)
 	};
 
 	psycho_ctx_init(&emu.ctx, &cfg);
-
-	psycho_log_enable(&emu.ctx, true);
 	psycho_log_level_set_global(&emu.ctx, PSYCHO_LOG_LEVEL_TRACE);
 
 	psycho_disasm_trace_instruction_enable(&emu.ctx, true);
 
 	for (;;) {
-		fflush(stdout);
-
 		if (emu.ctx.cpu.pc == 0x80030000)
 			__builtin_trap();
 
