@@ -35,11 +35,12 @@ static void illegal(struct psycho_ctx *const ctx)
 	ctx->event_cb(ctx, PSYCHO_CTX_EVENT_CPU_ILLEGAL, NULL);
 }
 
-static void branch_if(struct psycho_ctx *const ctx, const bool condition_met)
+static void branch_if(struct psycho_ctx *const ctx, const bool condition_met,
+		      const u32 curr_pc)
 {
 	if (condition_met)
-		ctx->cpu.next_pc = psycho_cpu_calc_branch_addr(ctx->cpu.instr,
-							       ctx->cpu.pc);
+		ctx->cpu.next_pc =
+			psycho_cpu_calc_branch_addr(ctx->cpu.instr, curr_pc);
 }
 
 static u32 get_physical_address(struct psycho_ctx *const ctx)
@@ -54,7 +55,7 @@ static u32 get_physical_address(struct psycho_ctx *const ctx)
 void psycho_cpu_reset(struct psycho_ctx *const ctx)
 {
 	ctx->cpu.pc = RESET_PC;
-	ctx->cpu.next_pc = RESET_PC;
+	ctx->cpu.next_pc = RESET_PC + sizeof(u32);
 }
 
 void psycho_cpu_step(struct psycho_ctx *const ctx)
@@ -68,11 +69,12 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 #define imm (psycho_cpu_instr_get_immediate(ctx->cpu.instr))
 #define gpr (ctx->cpu.gpr)
 
-	const u32 paddr = psycho_cpu_translate_vaddr_to_paddr(ctx->cpu.pc);
+	const u32 curr_pc = ctx->cpu.pc;
+	const u32 paddr = psycho_cpu_translate_vaddr_to_paddr(curr_pc);
 	ctx->cpu.instr = psycho_bus_load_word(ctx, paddr);
 
 	ctx->cpu.pc = ctx->cpu.next_pc;
-	ctx->cpu.next_pc += sizeof(u32);
+	ctx->cpu.next_pc = ctx->cpu.pc + sizeof(u32);
 
 	switch (op) {
 	case CPU_INSTR_GROUP_SPECIAL:
@@ -94,7 +96,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			break;
 
 		case CPU_INSTR_JALR:
-			gpr[rd] = ctx->cpu.pc + 4;
+			gpr[rd] = curr_pc + (sizeof(u32) * 2);
 			ctx->cpu.next_pc = gpr[rs];
 
 			break;
@@ -153,11 +155,11 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 	case CPU_INSTR_GROUP_BCOND:
 		switch (rt) {
 		case CPU_INSTR_BLTZ:
-			branch_if(ctx, (s32)gpr[rs] < 0);
+			branch_if(ctx, (s32)gpr[rs] < 0, curr_pc);
 			break;
 
 		case CPU_INSTR_BGEZ:
-			branch_if(ctx, (s32)gpr[rs] >= 0);
+			branch_if(ctx, (s32)gpr[rs] >= 0, curr_pc);
 			break;
 
 		default:
@@ -188,30 +190,30 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 
 	case CPU_INSTR_J:
 		ctx->cpu.next_pc =
-			psycho_cpu_calc_jmp_addr(ctx->cpu.instr, ctx->cpu.pc);
+			psycho_cpu_calc_jmp_addr(ctx->cpu.instr, curr_pc);
 		break;
 
 	case CPU_INSTR_JAL:
-		gpr[PSYCHO_CPU_GPR_RA] = ctx->cpu.pc + 4;
+		gpr[PSYCHO_CPU_GPR_RA] = curr_pc + (sizeof(u32) * 2);
 
 		ctx->cpu.next_pc =
-			psycho_cpu_calc_jmp_addr(ctx->cpu.instr, ctx->cpu.pc);
+			psycho_cpu_calc_jmp_addr(ctx->cpu.instr, curr_pc);
 		break;
 
 	case CPU_INSTR_BEQ:
-		branch_if(ctx, gpr[rs] == gpr[rt]);
+		branch_if(ctx, gpr[rs] == gpr[rt], curr_pc);
 		break;
 
 	case CPU_INSTR_BNE:
-		branch_if(ctx, gpr[rs] != gpr[rt]);
+		branch_if(ctx, gpr[rs] != gpr[rt], curr_pc);
 		break;
 
 	case CPU_INSTR_BLEZ:
-		branch_if(ctx, (s32)gpr[rs] <= 0);
+		branch_if(ctx, (s32)gpr[rs] <= 0, curr_pc);
 		break;
 
 	case CPU_INSTR_BGTZ:
-		branch_if(ctx, (s32)gpr[rs] > 0);
+		branch_if(ctx, (s32)gpr[rs] > 0, curr_pc);
 		break;
 
 	case CPU_INSTR_ADDI:

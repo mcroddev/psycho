@@ -142,7 +142,7 @@ ALWAYS_INLINE u32 psycho_cpu_calc_jmp_addr(const u32 instr, const u32 pc)
 ALWAYS_INLINE u32 psycho_cpu_calc_branch_addr(const u32 instr, const u32 pc)
 {
 	const u16 imm = psycho_cpu_instr_get_immediate(instr);
-	return psycho_sign_extend_16_32(imm << 2) + pc;
+	return psycho_sign_extend_16_32(imm << 2) + pc + sizeof(u32);
 }
 
 ALWAYS_INLINE u32 psycho_cpu_translate_vaddr_to_paddr(const u32 vaddr)
