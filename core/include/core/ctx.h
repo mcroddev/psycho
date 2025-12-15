@@ -35,16 +35,15 @@ extern "C" {
 #include "disasm.h"
 #include "log.h"
 
-enum psycho_ctx_event {
+enum psycho_event {
 	/** @brief The CPU has executed an illegal instruction. */
-	PSYCHO_CTX_EVENT_CPU_ILLEGAL,
+	PSYCHO_EVENT_CPU_ILLEGAL,
 
 	/** @brief A log message has been dispatched. */
-	PSYCHO_CTX_EVENT_LOG_MESSAGE
+	PSYCHO_EVENT_LOG_MESSAGE
 };
 
-typedef void (*psycho_event_cb)(struct psycho_ctx *,
-				const enum psycho_ctx_event, void *);
+typedef void (*psycho_event_cb)(struct psycho_ctx *, enum psycho_event, void *);
 
 struct psycho_ctx_cfg {
 	psycho_event_cb event_cb;
@@ -61,9 +60,22 @@ struct psycho_ctx {
 	psycho_event_cb event_cb;
 };
 
-void psycho_ctx_init(struct psycho_ctx *ctx, const struct psycho_ctx_cfg *cfg);
-void psycho_ctx_reset(struct psycho_ctx *ctx);
-void psycho_ctx_step(struct psycho_ctx *ctx);
+enum psycho_return_code {
+	PSYCHO_EXE_SIZE_BAD = -1,
+	PSYCHO_EXE_ID_BAD = -2,
+	PSYCHO_OK = 1
+};
+
+enum {
+	EXE_MIN_SIZE = 0x800,
+};
+
+void psycho_init(struct psycho_ctx *ctx, const struct psycho_ctx_cfg *cfg);
+void psycho_reset(struct psycho_ctx *ctx);
+void psycho_step(struct psycho_ctx *ctx);
+
+enum psycho_return_code psycho_exe_load(struct psycho_ctx *ctx,
+					const u8 *exe_data, size_t exe_size);
 
 #ifdef __cplusplus
 }

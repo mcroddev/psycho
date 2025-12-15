@@ -42,10 +42,13 @@
 #define COLOR_RESET "\e[0m"
 
 struct {
-	u8 ram[PSYCHO_RAM_SIZE];
-	u8 bios[PSYCHO_BIOS_SIZE];
+	u8 ram[RAM_SIZE];
+	u8 bios[BIOS_SIZE];
 	struct psycho_ctx ctx;
 } static emu;
+
+static u8 *exe_data;
+static size_t exe_size;
 
 static void handle_cpu_illegal_instr(struct psycho_ctx *const ctx)
 {
@@ -74,15 +77,15 @@ static void handle_log_message(const struct psycho_log_msg *const msg)
 }
 
 static void ctx_event_handle(struct psycho_ctx *const ctx,
-			     const enum psycho_ctx_event event,
+			     const enum psycho_event event,
 			     void *const data)
 {
 	switch (event) {
-	case PSYCHO_CTX_EVENT_CPU_ILLEGAL:
+	case PSYCHO_EVENT_CPU_ILLEGAL:
 		handle_cpu_illegal_instr(ctx);
 		return;
 
-	case PSYCHO_CTX_EVENT_LOG_MESSAGE:
+	case PSYCHO_EVENT_LOG_MESSAGE:
 		handle_log_message(data);
 		return;
 
@@ -112,11 +115,37 @@ static bool load_bios_file(const char *const bios_file)
 	return true;
 }
 
+static bool load_exe_file(const char *const exe_file)
+{
+	struct stat st;
+	if (stat(exe_file, &st) < 0)
+		return false;
+
+	FILE *exe_file_handle = fopen(exe_file, "rb");
+
+	if (!exe_file_handle)
+		return false;
+
+	exe_data = malloc(st.st_size);
+
+	const size_t bytes_read =
+		fread(exe_data, sizeof(u8), st.st_size, exe_file_handle);
+
+	if ((bytes_read != st.st_size) || (ferror(exe_file_handle))) {
+		fclose(exe_file_handle);
+		free(exe_data);
+
+		return false;
+	}
+	exe_size = st.st_size;
+	return true;
+}
+
 int main(int argc, char **argv)
 {
-	if (argc < 2) {
+	if (argc < 3) {
 		fprintf(stderr, "%s: missing required argument.\n", argv[0]);
-		fprintf(stderr, "syntax: %s <bios_file>\n", argv[0]);
+		fprintf(stderr, "syntax: %s <bios_file> <exe_file>\n", argv[0]);
 
 		return EXIT_FAILURE;
 	}
@@ -124,6 +153,13 @@ int main(int argc, char **argv)
 	if (!load_bios_file(argv[1])) {
 		fprintf(stderr,
 			"%s: error encountered loading bios file %s: %s\n",
+			argv[0], argv[1], strerror(errno));
+		return EXIT_FAILURE;
+	}
+
+	if (!load_exe_file(argv[2])) {
+		fprintf(stderr,
+			"%s: error encountered loading exe file %s: %s\n",
 			argv[0], argv[1], strerror(errno));
 		return EXIT_FAILURE;
 	}
@@ -138,16 +174,17 @@ int main(int argc, char **argv)
 		// clang-format on
 	};
 
-	psycho_ctx_init(&emu.ctx, &cfg);
+	psycho_init(&emu.ctx, &cfg);
 	psycho_log_level_set_global(&emu.ctx, PSYCHO_LOG_LEVEL_TRACE);
 
 	psycho_disasm_trace_instruction_enable(&emu.ctx, true);
 
 	for (;;) {
 		if (emu.ctx.cpu.pc == 0x80030000)
-			__builtin_trap();
+			if (!psycho_exe_load(&emu.ctx, exe_data, exe_size))
+				__builtin_trap();
 
-		psycho_ctx_step(&emu.ctx);
+		psycho_step(&emu.ctx);
 	}
 	return EXIT_FAILURE;
 }

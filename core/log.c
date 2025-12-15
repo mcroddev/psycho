@@ -91,5 +91,5 @@ void psycho_log_message_dispatch(struct psycho_ctx *const ctx,
 	msg.id = id;
 	msg.level = level;
 
-	ctx->event_cb(ctx, PSYCHO_CTX_EVENT_LOG_MESSAGE, &msg);
+	ctx->event_cb(ctx, PSYCHO_EVENT_LOG_MESSAGE, &msg);
 }

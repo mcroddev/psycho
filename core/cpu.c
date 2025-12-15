@@ -32,7 +32,7 @@ LOG_MODULE(PSYCHO_LOG_MODULE_ID_CPU);
 static void illegal(struct psycho_ctx *const ctx)
 {
 	LOG_ERROR(ctx, "Illegal instruction trapped: 0x%08X", ctx->cpu.instr);
-	ctx->event_cb(ctx, PSYCHO_CTX_EVENT_CPU_ILLEGAL, NULL);
+	ctx->event_cb(ctx, PSYCHO_EVENT_CPU_ILLEGAL, NULL);
 }
 
 static void branch_if(struct psycho_ctx *const ctx, const bool condition_met,
@@ -194,7 +194,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		break;
 
 	case CPU_INSTR_JAL:
-		gpr[PSYCHO_CPU_GPR_RA] = curr_pc + (sizeof(u32) * 2);
+		gpr[CPU_GPR_RA] = curr_pc + (sizeof(u32) * 2);
 
 		ctx->cpu.next_pc =
 			psycho_cpu_calc_jmp_addr(ctx->cpu.instr, curr_pc);
@@ -279,7 +279,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case CPU_INSTR_SW: {
-		if (!(ctx->cpu.cop0[PSYCHO_CPU_COP0_REG_SR] & CPU_SR_ISC)) {
+		if (!(ctx->cpu.cop0[CPU_COP0_SR] & CPU_SR_ISC)) {
 			const u32 m_paddr = get_physical_address(ctx);
 			psycho_bus_store_word(ctx, m_paddr, gpr[rt]);
 		}

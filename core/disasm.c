@@ -31,58 +31,58 @@
 
 LOG_MODULE(PSYCHO_LOG_MODULE_ID_DISASM);
 
-static const char *const gpr[PSYCHO_CPU_GPR_NUM] = {
+static const char *const gpr[CPU_GPR_NUM] = {
 	// clang-format off
 
-	[PSYCHO_CPU_GPR_ZERO]	= "$zero",
-	[PSYCHO_CPU_GPR_AT]	= "$at",
-	[PSYCHO_CPU_GPR_V0]	= "$v0",
-	[PSYCHO_CPU_GPR_V1]	= "$v1",
-	[PSYCHO_CPU_GPR_A0]	= "$a0",
-	[PSYCHO_CPU_GPR_A1]	= "$a1",
-	[PSYCHO_CPU_GPR_A2]	= "$a2",
-	[PSYCHO_CPU_GPR_A3]	= "$a3",
-	[PSYCHO_CPU_GPR_T0]	= "$t0",
-	[PSYCHO_CPU_GPR_T1]	= "$t1",
-	[PSYCHO_CPU_GPR_T2]	= "$t2",
-	[PSYCHO_CPU_GPR_T3]	= "$t3",
-	[PSYCHO_CPU_GPR_T4]	= "$t4",
-	[PSYCHO_CPU_GPR_T5]	= "$t5",
-	[PSYCHO_CPU_GPR_T6]	= "$t6",
-	[PSYCHO_CPU_GPR_T7]	= "$t7",
-	[PSYCHO_CPU_GPR_S0]	= "$s0",
-	[PSYCHO_CPU_GPR_S1]	= "$s1",
-	[PSYCHO_CPU_GPR_S2]	= "$s2",
-	[PSYCHO_CPU_GPR_S3]	= "$s3",
-	[PSYCHO_CPU_GPR_S4]	= "$s4",
-	[PSYCHO_CPU_GPR_S5]	= "$s5",
-	[PSYCHO_CPU_GPR_S6]	= "$s6",
-	[PSYCHO_CPU_GPR_S7]	= "$s7",
-	[PSYCHO_CPU_GPR_T8]	= "$t8",
-	[PSYCHO_CPU_GPR_T9]	= "$t9",
-	[PSYCHO_CPU_GPR_K0]	= "$k0",
-	[PSYCHO_CPU_GPR_K1]	= "$k1",
-	[PSYCHO_CPU_GPR_GP]	= "$gp",
-	[PSYCHO_CPU_GPR_SP]	= "$sp",
-	[PSYCHO_CPU_GPR_FP]	= "$fp",
-	[PSYCHO_CPU_GPR_RA]	= "$ra"
+	[CPU_GPR_ZERO]	= "$zero",
+	[CPU_GPR_AT]	= "$at",
+	[CPU_GPR_V0]	= "$v0",
+	[CPU_GPR_V1]	= "$v1",
+	[CPU_GPR_A0]	= "$a0",
+	[CPU_GPR_A1]	= "$a1",
+	[CPU_GPR_A2]	= "$a2",
+	[CPU_GPR_A3]	= "$a3",
+	[CPU_GPR_T0]	= "$t0",
+	[CPU_GPR_T1]	= "$t1",
+	[CPU_GPR_T2]	= "$t2",
+	[CPU_GPR_T3]	= "$t3",
+	[CPU_GPR_T4]	= "$t4",
+	[CPU_GPR_T5]	= "$t5",
+	[CPU_GPR_T6]	= "$t6",
+	[CPU_GPR_T7]	= "$t7",
+	[CPU_GPR_S0]	= "$s0",
+	[CPU_GPR_S1]	= "$s1",
+	[CPU_GPR_S2]	= "$s2",
+	[CPU_GPR_S3]	= "$s3",
+	[CPU_GPR_S4]	= "$s4",
+	[CPU_GPR_S5]	= "$s5",
+	[CPU_GPR_S6]	= "$s6",
+	[CPU_GPR_S7]	= "$s7",
+	[CPU_GPR_T8]	= "$t8",
+	[CPU_GPR_T9]	= "$t9",
+	[CPU_GPR_K0]	= "$k0",
+	[CPU_GPR_K1]	= "$k1",
+	[CPU_GPR_GP]	= "$gp",
+	[CPU_GPR_SP]	= "$sp",
+	[CPU_GPR_FP]	= "$fp",
+	[CPU_GPR_RA]	= "$ra"
 
 	// clang-format on
 };
 
-static const char *const cop0_cpr[PSYCHO_CPU_COP0_REG_NUM] = {
+static const char *const cop0_cpr[CPU_COP0_NUM] = {
 	// clang-format off
 
-	[PSYCHO_CPU_COP0_REG_BPC]	= "BPC",
-	[PSYCHO_CPU_COP0_REG_BDA]	= "BDA",
-	[PSYCHO_CPU_COP0_REG_TAR]	= "TAR",
-	[PSYCHO_CPU_COP0_REG_DCIC]	= "DCIC",
-	[PSYCHO_CPU_COP0_REG_BADA]	= "BadA",
-	[PSYCHO_CPU_COP0_REG_BDAM]	= "BDAM",
-	[PSYCHO_CPU_COP0_REG_BPCM]	= "BPCM",
-	[PSYCHO_CPU_COP0_REG_SR]	= "SR",
-	[PSYCHO_CPU_COP0_REG_CAUSE]	= "CAUSE",
-	[PSYCHO_CPU_COP0_REG_PRID]	= "PRID",
+	[CPU_COP0_BPC]		= "BPC",
+	[CPU_COP0_BDA]		= "BDA",
+	[CPU_COP0_TAR]		= "TAR",
+	[CPU_COP0_DCIC]		= "DCIC",
+	[CPU_COP0_BADA]		= "BadA",
+	[CPU_COP0_BDAM]		= "BDAM",
+	[CPU_COP0_BPCM]		= "BPCM",
+	[CPU_COP0_SR]		= "SR",
+	[CPU_COP0_CAUSE]	= "CAUSE",
+	[CPU_COP0_PRID]		= "PRID",
 
 	// clang-format on
 };

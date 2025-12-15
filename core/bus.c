@@ -37,11 +37,11 @@ u32 psycho_bus_load_word(struct psycho_ctx *const ctx, const u32 paddr)
 	u32 word;
 
 	switch (paddr) {
-	case PSYCHO_RAM_ADDR_START ... PSYCHO_RAM_ADDR_END:
+	case RAM_ADDR_START ... RAM_ADDR_END:
 		memcpy(&word, &ctx->bus.ram[paddr], sizeof(u32));
 		return word;
 
-	case PSYCHO_BIOS_ADDR_START ... PSYCHO_BIOS_ADDR_END:
+	case BIOS_ADDR_START ... BIOS_ADDR_END:
 		memcpy(&word, &ctx->bus.bios[paddr & 0x000FFFFF], sizeof(u32));
 		return word;
 
@@ -56,10 +56,10 @@ u32 psycho_bus_load_word(struct psycho_ctx *const ctx, const u32 paddr)
 u8 psycho_bus_load_byte(struct psycho_ctx *const ctx, const u32 paddr)
 {
 	switch (paddr) {
-	case PSYCHO_RAM_ADDR_START ... PSYCHO_RAM_ADDR_END:
+	case RAM_ADDR_START ... RAM_ADDR_END:
 		return ctx->bus.ram[paddr];
 
-	case PSYCHO_BIOS_ADDR_START ... PSYCHO_BIOS_ADDR_END:
+	case BIOS_ADDR_START ... BIOS_ADDR_END:
 		return ctx->bus.bios[paddr & 0x000FFFFF];
 
 	default:
@@ -73,7 +73,7 @@ void psycho_bus_store_word(struct psycho_ctx *const ctx, const u32 paddr,
 			   const u32 word)
 {
 	switch (paddr) {
-	case PSYCHO_RAM_ADDR_START ... PSYCHO_RAM_ADDR_END:
+	case RAM_ADDR_START ... RAM_ADDR_END:
 		memcpy(&ctx->bus.ram[paddr], &word, sizeof(u32));
 		return;
 
@@ -96,7 +96,7 @@ void psycho_bus_store_byte(struct psycho_ctx *const ctx, const u32 paddr,
 			   const u8 byte)
 {
 	switch (paddr) {
-	case PSYCHO_RAM_ADDR_START ... PSYCHO_RAM_ADDR_END:
+	case RAM_ADDR_START ... RAM_ADDR_END:
 		ctx->bus.ram[paddr] = byte;
 		return;
 

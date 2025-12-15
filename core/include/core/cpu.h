@@ -32,8 +32,8 @@ extern "C" {
 struct psycho_ctx;
 
 struct psycho_cpu {
-	u32 gpr[PSYCHO_CPU_GPR_NUM];
-	u32 cop0[PSYCHO_CPU_COP0_REG_NUM];
+	u32 gpr[CPU_GPR_NUM];
+	u32 cop0[CPU_COP0_NUM];
 	u32 alu_hi;
 	u32 alu_lo;
 	u32 pc;
