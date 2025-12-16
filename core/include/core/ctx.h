@@ -30,6 +30,7 @@ extern "C" {
 
 #include <stdbool.h>
 
+#include "bios-trace.h"
 #include "bus.h"
 #include "cpu.h"
 #include "disasm.h"
@@ -40,7 +41,14 @@ enum psycho_event {
 	PSYCHO_EVENT_CPU_ILLEGAL,
 
 	/** @brief A log message has been dispatched. */
-	PSYCHO_EVENT_LOG_MESSAGE
+	PSYCHO_EVENT_LOG_MESSAGE,
+
+	/**
+	 * @brief A TTY message has been dispatched.
+	 *
+	 * Note that this event will not be raised until a newline is seen.
+	 */
+	PSYCHO_EVENT_TTY_MESSAGE
 };
 
 typedef void (*psycho_event_cb)(struct psycho_ctx *, enum psycho_event, void *);
@@ -56,6 +64,7 @@ struct psycho_ctx {
 	struct psycho_cpu cpu;
 	struct psycho_disasm disasm;
 	struct psycho_log log;
+	struct psycho_bios_trace bios_trace;
 
 	psycho_event_cb event_cb;
 };
@@ -73,6 +82,8 @@ enum {
 void psycho_init(struct psycho_ctx *ctx, const struct psycho_ctx_cfg *cfg);
 void psycho_reset(struct psycho_ctx *ctx);
 void psycho_step(struct psycho_ctx *ctx);
+
+void psycho_tty_stdout_enable(struct psycho_ctx *ctx, bool enable);
 
 enum psycho_return_code psycho_exe_load(struct psycho_ctx *ctx,
 					const u8 *exe_data, size_t exe_size);

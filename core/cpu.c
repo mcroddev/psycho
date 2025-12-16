@@ -109,6 +109,19 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			gpr[rd] = ctx->cpu.alu_lo;
 			break;
 
+		case CPU_INSTR_MTLO:
+			ctx->cpu.alu_lo = gpr[rs];
+			break;
+
+		case CPU_INSTR_MULT: {
+			const u64 prod = gpr[rs] * gpr[rt];
+
+			ctx->cpu.alu_lo = prod & UINT32_MAX;
+			ctx->cpu.alu_hi = prod >> 32;
+
+			break;
+		}
+
 		case CPU_INSTR_DIV:
 			ctx->cpu.alu_lo = (s32)gpr[rs] / (s32)gpr[rt];
 			ctx->cpu.alu_hi = (s32)gpr[rs] % (s32)gpr[rt];
@@ -235,6 +248,10 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 
 	case CPU_INSTR_ORI:
 		gpr[rt] = gpr[rs] | imm;
+		break;
+
+	case CPU_INSTR_XORI:
+		gpr[rt] = gpr[rs] ^ imm;
 		break;
 
 	case CPU_INSTR_LUI:

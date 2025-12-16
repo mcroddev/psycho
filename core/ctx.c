@@ -21,8 +21,8 @@
 // SOFTWARE.
 
 #include <string.h>
-#include "core/ctx.h"
 
+#include "bios-trace.h"
 #include "cpu-defs.h"
 #include "cpu.h"
 #include "disasm.h"
@@ -64,10 +64,19 @@ void psycho_step(struct psycho_ctx *const ctx)
 	if (ctx->disasm.trace_instruction)
 		psycho_disasm_trace_begin(ctx);
 
+	psycho_bios_trace_begin(ctx);
+
 	psycho_cpu_step(ctx);
 
 	if (ctx->disasm.trace_instruction)
 		psycho_disasm_trace_end(ctx);
+
+	psycho_bios_trace_end(ctx);
+}
+
+void psycho_tty_stdout_enable(struct psycho_ctx *const ctx, const bool enable)
+{
+	ctx->bios_trace.enable_tty_output = enable;
 }
 
 enum psycho_return_code psycho_exe_load(struct psycho_ctx *const ctx,

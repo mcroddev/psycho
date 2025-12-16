@@ -144,6 +144,14 @@ void psycho_disasm_instr(struct psycho_ctx *const ctx, const u32 instr,
 			set_result("mflo %s", gpr[rd]);
 			return;
 
+		case CPU_INSTR_MTLO:
+			set_result("mtlo %s", gpr[rs]);
+			return;
+
+		case CPU_INSTR_MULT:
+			set_result("mult %s, %s", gpr[rs], gpr[rt]);
+			return;
+
 		case CPU_INSTR_DIV:
 			set_result("div %s, %s", gpr[rs], gpr[rt]);
 			return;
@@ -270,6 +278,10 @@ void psycho_disasm_instr(struct psycho_ctx *const ctx, const u32 instr,
 
 	case CPU_INSTR_ORI:
 		set_result("ori %s, %s, 0x%04X", gpr[rt], gpr[rs], imm);
+		return;
+
+	case CPU_INSTR_XORI:
+		set_result("xori %s, %s, 0x%04X", gpr[rt], gpr[rs], imm);
 		return;
 
 	case CPU_INSTR_LUI:

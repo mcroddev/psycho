@@ -47,7 +47,8 @@ static const char *const module_name[PSYCHO_LOG_MODULE_ID_NUM] = {
 	[PSYCHO_LOG_MODULE_ID_CTX]	= "ctx",
 	[PSYCHO_LOG_MODULE_ID_CPU]	= "cpu",
 	[PSYCHO_LOG_MODULE_ID_DISASM]	= "disasm",
-	[PSYCHO_LOG_MODULE_ID_BUS]	= "bus"
+	[PSYCHO_LOG_MODULE_ID_BUS]	= "bus",
+	[PSYCHO_LOG_MODULE_ID_BIOS]	= "bios"
 
 	// clang-format on
 };

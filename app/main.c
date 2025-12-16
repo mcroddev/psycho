@@ -50,6 +50,8 @@ struct {
 static u8 *exe_data;
 static size_t exe_size;
 
+static FILE *tty_file;
+
 static void handle_cpu_illegal_instr(struct psycho_ctx *const ctx)
 {
 	__builtin_trap();
@@ -76,9 +78,14 @@ static void handle_log_message(const struct psycho_log_msg *const msg)
 	}
 }
 
+static void handle_tty_message(const char *const data)
+{
+	fprintf(tty_file, "%s", data);
+	fflush(tty_file);
+}
+
 static void ctx_event_handle(struct psycho_ctx *const ctx,
-			     const enum psycho_event event,
-			     void *const data)
+			     const enum psycho_event event, void *const data)
 {
 	switch (event) {
 	case PSYCHO_EVENT_CPU_ILLEGAL:
@@ -87,6 +94,10 @@ static void ctx_event_handle(struct psycho_ctx *const ctx,
 
 	case PSYCHO_EVENT_LOG_MESSAGE:
 		handle_log_message(data);
+		return;
+
+	case PSYCHO_EVENT_TTY_MESSAGE:
+		handle_tty_message(data);
 		return;
 
 	default:
@@ -164,6 +175,8 @@ int main(int argc, char **argv)
 		return EXIT_FAILURE;
 	}
 
+	tty_file = fopen("tty_file.txt", "w");
+
 	static const struct psycho_ctx_cfg cfg = {
 		// clang-format off
 
@@ -175,14 +188,23 @@ int main(int argc, char **argv)
 	};
 
 	psycho_init(&emu.ctx, &cfg);
-	psycho_log_level_set_global(&emu.ctx, PSYCHO_LOG_LEVEL_TRACE);
+	psycho_tty_stdout_enable(&emu.ctx, true);
 
-	psycho_disasm_trace_instruction_enable(&emu.ctx, true);
+	psycho_log_module_level_set(&emu.ctx, PSYCHO_LOG_MODULE_ID_BIOS,
+				    PSYCHO_LOG_LEVEL_INFO);
 
 	for (;;) {
-		if (emu.ctx.cpu.pc == 0x80030000)
+		if (emu.ctx.cpu.pc == 0x80030000) {
 			if (!psycho_exe_load(&emu.ctx, exe_data, exe_size))
 				__builtin_trap();
+
+			psycho_log_level_set_global(&emu.ctx,
+						    PSYCHO_LOG_LEVEL_TRACE);
+			psycho_disasm_trace_instruction_enable(&emu.ctx, true);
+		}
+
+		if (emu.ctx.cpu.pc == 0x000000B0)
+			asm("nop");
 
 		psycho_step(&emu.ctx);
 	}

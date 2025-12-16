@@ -20,9 +20,10 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
-set(SRCS bus.c cpu.c ctx.c disasm.c log.c)
+set(SRCS bios-trace.c bus.c cpu.c ctx.c disasm.c log.c)
 
 set(HDRS_PUBLIC
+	include/core/bios-trace.h
 	include/core/bus.h
 	include/core/cpu.h
 	include/core/ctx.h
