@@ -102,7 +102,7 @@ enum psycho_return_code psycho_exe_load(struct psycho_ctx *const ctx,
 	ctx->cpu.gpr[CPU_GPR_GP] = extract_u32(EXE_OFF_INITIAL_GP);
 
 	u32 dst_addr = extract_u32(EXE_OFF_DEST_ADDR);
-	dst_addr = psycho_cpu_translate_vaddr_to_paddr(dst_addr);
+	dst_addr = vaddr_to_paddr(dst_addr);
 
 	const u32 file_size = extract_u32(EXE_OFF_FILE_SIZE);
 	memcpy(&ctx->bus.ram[dst_addr], &exe_data[EXE_OFF_CODE], file_size);

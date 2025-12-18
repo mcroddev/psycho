@@ -41,6 +41,11 @@ u32 psycho_bus_load_word(struct psycho_ctx *const ctx, const u32 paddr)
 		memcpy(&word, &ctx->bus.ram[paddr], sizeof(u32));
 		return word;
 
+	case SCRATCHPAD_ADDR_START ... SCRATCHPAD_ADDR_END:
+		memcpy(&word, &ctx->bus.scratchpad[paddr & 0x00000FFF],
+		       sizeof(u32));
+		return word;
+
 	case BIOS_ADDR_START ... BIOS_ADDR_END:
 		memcpy(&word, &ctx->bus.bios[paddr & 0x000FFFFF], sizeof(u32));
 		return word;
@@ -53,11 +58,36 @@ u32 psycho_bus_load_word(struct psycho_ctx *const ctx, const u32 paddr)
 	}
 }
 
+u16 psycho_bus_load_halfword(struct psycho_ctx *const ctx, const u32 paddr)
+{
+	u16 halfword;
+
+	switch (paddr) {
+	case RAM_ADDR_START ... RAM_ADDR_END:
+		memcpy(&halfword, &ctx->bus.ram[paddr], sizeof(u16));
+		return halfword;
+
+	case SCRATCHPAD_ADDR_START ... SCRATCHPAD_ADDR_END:
+		memcpy(&halfword, &ctx->bus.scratchpad[paddr & 0x00000FFF],
+		       sizeof(u16));
+		return halfword;
+
+	default:
+		break;
+	}
+
+	LOG_WARN(ctx, "Unknown halfword load: 0x%08X; returning 0xFFFF", paddr);
+	return 0xFFFF;
+}
+
 u8 psycho_bus_load_byte(struct psycho_ctx *const ctx, const u32 paddr)
 {
 	switch (paddr) {
 	case RAM_ADDR_START ... RAM_ADDR_END:
 		return ctx->bus.ram[paddr];
+
+	case SCRATCHPAD_ADDR_START ... SCRATCHPAD_ADDR_END:
+		return ctx->bus.scratchpad[paddr & 0x00000FFF];
 
 	case BIOS_ADDR_START ... BIOS_ADDR_END:
 		return ctx->bus.bios[paddr & 0x000FFFFF];
@@ -77,6 +107,11 @@ void psycho_bus_store_word(struct psycho_ctx *const ctx, const u32 paddr,
 		memcpy(&ctx->bus.ram[paddr], &word, sizeof(u32));
 		return;
 
+	case SCRATCHPAD_ADDR_START ... SCRATCHPAD_ADDR_END:
+		memcpy(&ctx->bus.scratchpad[paddr & 0x00000FFF], &word,
+		       sizeof(u32));
+		return;
+
 	default:
 		break;
 	}
@@ -88,6 +123,20 @@ void psycho_bus_store_word(struct psycho_ctx *const ctx, const u32 paddr,
 void psycho_bus_store_halfword(struct psycho_ctx *const ctx, const u32 paddr,
 			       const u16 halfword)
 {
+	switch (paddr) {
+	case RAM_ADDR_START ... RAM_ADDR_END:
+		memcpy(&ctx->bus.ram[paddr], &halfword, sizeof(u16));
+		return;
+
+	case SCRATCHPAD_ADDR_START ... SCRATCHPAD_ADDR_END:
+		memcpy(&ctx->bus.scratchpad[paddr & 0x00000FFF], &halfword,
+		       sizeof(u16));
+		return;
+
+	default:
+		break;
+	}
+
 	LOG_WARN(ctx, "Unknown halfword store: 0x%08X <- 0x%04X; ignoring",
 		 paddr, halfword);
 }
@@ -98,6 +147,10 @@ void psycho_bus_store_byte(struct psycho_ctx *const ctx, const u32 paddr,
 	switch (paddr) {
 	case RAM_ADDR_START ... RAM_ADDR_END:
 		ctx->bus.ram[paddr] = byte;
+		return;
+
+	case SCRATCHPAD_ADDR_START ... SCRATCHPAD_ADDR_END:
+		ctx->bus.scratchpad[paddr & 0x00000FFF] = byte;
 		return;
 
 	default:

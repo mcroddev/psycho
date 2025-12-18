@@ -25,12 +25,22 @@
 #include "core/compiler.h"
 #include "core/types.h"
 
-ALWAYS_INLINE u32 psycho_sign_extend_16_32(const u16 val)
+ALWAYS_INLINE u32 sign_ext_16_32(const u16 val)
 {
 	return (s16)val;
 }
 
-ALWAYS_INLINE u32 psycho_sign_extend_8_32(const u8 val)
+ALWAYS_INLINE u32 sign_ext_8_32(const u8 val)
 {
 	return (s8)val;
+}
+
+ALWAYS_INLINE u64 sign_ext_32_64(const u32 val)
+{
+	return (s32)val;
+}
+
+ALWAYS_INLINE u64 zero_ext_32_64(const u32 val)
+{
+	return val;
 }

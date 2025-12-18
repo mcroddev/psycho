@@ -190,9 +190,6 @@ int main(int argc, char **argv)
 	psycho_init(&emu.ctx, &cfg);
 	psycho_tty_stdout_enable(&emu.ctx, true);
 
-	psycho_log_module_level_set(&emu.ctx, PSYCHO_LOG_MODULE_ID_BIOS,
-				    PSYCHO_LOG_LEVEL_INFO);
-
 	for (;;) {
 		if (emu.ctx.cpu.pc == 0x80030000) {
 			if (!psycho_exe_load(&emu.ctx, exe_data, exe_size))

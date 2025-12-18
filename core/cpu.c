@@ -35,127 +35,249 @@ static void illegal(struct psycho_ctx *const ctx)
 	ctx->event_cb(ctx, PSYCHO_EVENT_CPU_ILLEGAL, NULL);
 }
 
-static void branch_if(struct psycho_ctx *const ctx, const bool condition_met,
-		      const u32 curr_pc)
+static void branch_if(struct psycho_ctx *const ctx, const bool cond_met)
 {
-	if (condition_met)
+	if (cond_met)
 		ctx->cpu.next_pc =
-			psycho_cpu_calc_branch_addr(ctx->cpu.instr, curr_pc);
+			calc_branch_addr(ctx->cpu.instr, ctx->cpu.curr_pc);
 }
 
-static u32 get_physical_address(struct psycho_ctx *const ctx)
+static u32 get_phys_addr(struct psycho_ctx *const ctx)
 {
-	const u16 offset = psycho_cpu_instr_get_offset(ctx->cpu.instr);
-	const uint base = psycho_cpu_instr_get_rs(ctx->cpu.instr);
-	const u32 vaddr = psycho_cpu_get_vaddr(offset, ctx->cpu.gpr[base]);
+	const u16 off = instr_off(ctx->cpu.instr);
+	const uint base = instr_rs(ctx->cpu.instr);
+	const u32 vaddr = get_vaddr(off, ctx->cpu.gpr[base]);
 
-	return psycho_cpu_translate_vaddr_to_paddr(vaddr);
+	return vaddr_to_paddr(vaddr);
+}
+
+static void raise_exception(struct psycho_ctx *const ctx,
+			    const enum cpu_exc_code exc)
+{
+	// On an exception, the CPU:
+
+	static const char *const exc_name[] = {
+		[EXCEPTION_OV] = "Arithmetic overflow",
+	};
+
+	LOG_WARN(ctx, "%s exception raised", exc_name[exc]);
+
+	// 1) sets up EPC to point to the restart location.
+	ctx->cpu.cop0[CPU_COP0_EPC] = ctx->cpu.curr_pc;
+
+	// 2) the pre-existing user-mode and interrupt-enable flags in SR are
+	//    saved by pushing the 3-entry stack inside SR, and changing to
+	//    kernel mode with interrupts disabled.
+	ctx->cpu.cop0[CPU_COP0_SR] =
+		(ctx->cpu.cop0[CPU_COP0_SR] & 0xFFFFFFC0) |
+		((ctx->cpu.cop0[CPU_COP0_SR] & 0x0000000F) << 2);
+
+	// 3) Cause is setup so that software can see the reason for the
+	//    exception.
+	ctx->cpu.cop0[CPU_COP0_CAUSE] =
+		(ctx->cpu.cop0[CPU_COP0_CAUSE] & ~0xFFFF00FF) | (exc << 2);
+
+	// 4) transfers control to the exception entry point.
+	ctx->cpu.pc = 0x00000080;
+	ctx->cpu.next_pc = 0x00000084;
 }
 
 void psycho_cpu_reset(struct psycho_ctx *const ctx)
 {
 	ctx->cpu.pc = RESET_PC;
 	ctx->cpu.next_pc = RESET_PC + sizeof(u32);
+	ctx->cpu.curr_pc = ctx->cpu.pc;
 }
 
 void psycho_cpu_step(struct psycho_ctx *const ctx)
 {
-#define op (psycho_cpu_instr_get_op(ctx->cpu.instr))
-#define rt (psycho_cpu_instr_get_rt(ctx->cpu.instr))
-#define rd (psycho_cpu_instr_get_rd(ctx->cpu.instr))
-#define rs (psycho_cpu_instr_get_rs(ctx->cpu.instr))
-#define funct (psycho_cpu_instr_get_funct(ctx->cpu.instr))
-#define shamt (psycho_cpu_instr_get_shamt(ctx->cpu.instr))
-#define imm (psycho_cpu_instr_get_immediate(ctx->cpu.instr))
+#define op (instr_op(ctx->cpu.instr))
+#define rt (instr_rt(ctx->cpu.instr))
+#define rd (instr_rd(ctx->cpu.instr))
+#define rs (instr_rs(ctx->cpu.instr))
+#define funct (instr_funct(ctx->cpu.instr))
+#define shamt (instr_shamt(ctx->cpu.instr))
+#define imm (instr_imm(ctx->cpu.instr))
 #define gpr (ctx->cpu.gpr)
 
-	const u32 curr_pc = ctx->cpu.pc;
-	const u32 paddr = psycho_cpu_translate_vaddr_to_paddr(curr_pc);
+	ctx->cpu.curr_pc = ctx->cpu.pc;
+	const u32 paddr = vaddr_to_paddr(ctx->cpu.curr_pc);
 	ctx->cpu.instr = psycho_bus_load_word(ctx, paddr);
 
 	ctx->cpu.pc = ctx->cpu.next_pc;
 	ctx->cpu.next_pc = ctx->cpu.pc + sizeof(u32);
 
 	switch (op) {
-	case CPU_INSTR_GROUP_SPECIAL:
+	case INSTR_GROUP_SPECIAL:
 		switch (funct) {
-		case CPU_INSTR_SLL:
+		case INSTR_SLL:
 			gpr[rd] = gpr[rt] << shamt;
 			break;
 
-		case CPU_INSTR_SRL:
+		case INSTR_SRL:
 			gpr[rd] = gpr[rt] >> shamt;
 			break;
 
-		case CPU_INSTR_SRA:
+		case INSTR_SRA:
 			gpr[rd] = (s32)gpr[rt] >> shamt;
 			break;
 
-		case CPU_INSTR_JR:
+		case INSTR_SLLV:
+			gpr[rd] = gpr[rt] << (gpr[rs] & 0x0000001F);
+			break;
+
+		case INSTR_SRLV:
+			gpr[rd] = gpr[rt] >> (gpr[rs] & 0x0000001F);
+			break;
+
+		case INSTR_SRAV:
+			gpr[rd] = (s32)gpr[rt] >> (gpr[rs] & 0x0000001F);
+			break;
+
+		case INSTR_JR:
 			ctx->cpu.next_pc = gpr[rs];
 			break;
 
-		case CPU_INSTR_JALR:
-			gpr[rd] = curr_pc + (sizeof(u32) * 2);
+		case INSTR_JALR:
+			gpr[rd] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
 			ctx->cpu.next_pc = gpr[rs];
 
 			break;
 
-		case CPU_INSTR_MFHI:
-			gpr[rd] = ctx->cpu.alu_hi;
+		case INSTR_MFHI:
+			gpr[rd] = ctx->cpu.hi;
 			break;
 
-		case CPU_INSTR_MFLO:
-			gpr[rd] = ctx->cpu.alu_lo;
+		case INSTR_MTHI:
+			ctx->cpu.hi = gpr[rs];
 			break;
 
-		case CPU_INSTR_MTLO:
-			ctx->cpu.alu_lo = gpr[rs];
+		case INSTR_MFLO:
+			gpr[rd] = ctx->cpu.lo;
 			break;
 
-		case CPU_INSTR_MULT: {
-			const u64 prod = gpr[rs] * gpr[rt];
+		case INSTR_MTLO:
+			ctx->cpu.lo = gpr[rs];
+			break;
 
-			ctx->cpu.alu_lo = prod & UINT32_MAX;
-			ctx->cpu.alu_hi = prod >> 32;
+		case INSTR_MULT: {
+			const u64 prod = sign_ext_32_64(gpr[rs]) *
+					 sign_ext_32_64(gpr[rt]);
+
+			ctx->cpu.lo = prod & UINT32_MAX;
+			ctx->cpu.hi = prod >> 32;
 
 			break;
 		}
 
-		case CPU_INSTR_DIV:
-			ctx->cpu.alu_lo = (s32)gpr[rs] / (s32)gpr[rt];
-			ctx->cpu.alu_hi = (s32)gpr[rs] % (s32)gpr[rt];
+		case INSTR_MULTU: {
+			const u64 prod = zero_ext_32_64(gpr[rs]) *
+					 zero_ext_32_64(gpr[rt]);
+
+			ctx->cpu.lo = prod & UINT32_MAX;
+			ctx->cpu.hi = prod >> 32;
 
 			break;
+		}
 
-		case CPU_INSTR_DIVU:
-			ctx->cpu.alu_lo = gpr[rs] / gpr[rt];
-			ctx->cpu.alu_hi = gpr[rs] % gpr[rt];
+		case INSTR_DIV: {
+			// The result of a division by zero is consistent with
+			// the result of a simple radix-2 (“one bit at a time”)
+			// implementation.
 
+			const s32 divisor = (s32)gpr[rt];
+			const s32 dividend = (s32)gpr[rs];
+
+			if (unlikely(!divisor)) {
+				// That is, if the dividend is negative, the
+				// quotient is 1 (0x00000001), and if the
+				// dividend is positive or zero, the quotient is
+				// -1 (0xFFFFFFFF).
+				ctx->cpu.lo = (dividend < 0) ? 0x000000001 :
+							       UINT32_MAX;
+
+				// In both cases the remainder equals the
+				// dividend.
+				ctx->cpu.hi = dividend;
+			} else if (unlikely(((u32)dividend == 0x80000000) &&
+					    ((u32)divisor == 0xFFFFFFFF))) {
+				ctx->cpu.lo = dividend;
+				ctx->cpu.hi = 0x00000000;
+			} else {
+				ctx->cpu.lo = dividend / divisor;
+				ctx->cpu.hi = dividend % divisor;
+			}
 			break;
+		}
 
-		case CPU_INSTR_ADD:
-		case CPU_INSTR_ADDU:
+		case INSTR_DIVU: {
+			if (unlikely(!gpr[rt])) {
+				// In the case of unsigned division, the
+				// dividend can't be negative and thus the
+				// quotient is always -1 (0xFFFFFFFF) and the
+				// remainder equals the dividend.
+				ctx->cpu.lo = UINT32_MAX;
+				ctx->cpu.hi = gpr[rs];
+			} else {
+				ctx->cpu.lo = gpr[rs] / gpr[rt];
+				ctx->cpu.hi = gpr[rs] % gpr[rt];
+			}
+			break;
+		}
+
+		case INSTR_ADD: {
+			int sum;
+
+			if (unlikely(__builtin_sadd_overflow(gpr[rs], gpr[rt],
+							     &sum))) {
+				raise_exception(ctx, EXCEPTION_OV);
+				break;
+			}
+			gpr[rd] = sum;
+			break;
+		}
+
+		case INSTR_ADDU:
 			gpr[rd] = gpr[rs] + gpr[rt];
 			break;
 
-		case CPU_INSTR_SUBU:
+		case INSTR_SUB: {
+			int diff;
+
+			if (unlikely(__builtin_ssub_overflow(gpr[rs], gpr[rt],
+							     &diff))) {
+				raise_exception(ctx, EXCEPTION_OV);
+				break;
+			}
+			gpr[rd] = diff;
+			break;
+		}
+
+		case INSTR_SUBU:
 			gpr[rd] = gpr[rs] - gpr[rt];
 			break;
 
-		case CPU_INSTR_AND:
+		case INSTR_AND:
 			gpr[rd] = gpr[rs] & gpr[rt];
 			break;
 
-		case CPU_INSTR_OR:
+		case INSTR_OR:
 			gpr[rd] = gpr[rs] | gpr[rt];
 			break;
 
-		case CPU_INSTR_SLT:
+		case INSTR_XOR:
+			gpr[rd] = gpr[rs] ^ gpr[rt];
+			break;
+
+		case INSTR_NOR:
+			gpr[rd] = ~(gpr[rs] | gpr[rt]);
+			break;
+
+		case INSTR_SLT:
 			gpr[rd] = (s32)gpr[rs] < (s32)gpr[rt];
 			break;
 
-		case CPU_INSTR_SLTU:
+		case INSTR_SLTU:
 			gpr[rd] = gpr[rs] < gpr[rt];
 			break;
 
@@ -165,14 +287,20 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		}
 		break;
 
-	case CPU_INSTR_GROUP_BCOND:
+	case INSTR_GROUP_BCOND:
 		switch (rt) {
-		case CPU_INSTR_BLTZ:
-			branch_if(ctx, (s32)gpr[rs] < 0, curr_pc);
+		case INSTR_BLTZ:
+			branch_if(ctx, (s32)gpr[rs] < 0);
 			break;
 
-		case CPU_INSTR_BGEZ:
-			branch_if(ctx, (s32)gpr[rs] >= 0, curr_pc);
+		case INSTR_BGEZ:
+			branch_if(ctx, (s32)gpr[rs] >= 0);
+			break;
+
+		case INSTR_BLTZAL:
+			gpr[CPU_GPR_RA] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
+			branch_if(ctx, (s32)gpr[rs] < 0);
+
 			break;
 
 		default:
@@ -181,18 +309,28 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		}
 		break;
 
-	case CPU_INSTR_GROUP_COP0:
+	case INSTR_GROUP_COP0:
 		switch (rs) {
-		case CPU_INSTR_COP_MF:
+		case INSTR_COP_MF:
 			gpr[rt] = ctx->cpu.cop0[rd];
 			break;
 
-		case CPU_INSTR_COP_MT:
+		case INSTR_COP_MT:
 			ctx->cpu.cop0[rd] = gpr[rt];
 			break;
 
 		default:
 			switch (funct) {
+			case INSTR_RFE:
+				ctx->cpu.cop0[CPU_COP0_SR] =
+					(ctx->cpu.cop0[CPU_COP0_SR] &
+					 0xFFFFFFF0) |
+					((ctx->cpu.cop0[CPU_COP0_SR] &
+					  0x0000003C) >>
+					 2);
+
+				break;
+
 			default:
 				illegal(ctx);
 				return;
@@ -201,103 +339,182 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		}
 		break;
 
-	case CPU_INSTR_J:
+	case INSTR_J:
 		ctx->cpu.next_pc =
-			psycho_cpu_calc_jmp_addr(ctx->cpu.instr, curr_pc);
+			calc_jmp_addr(ctx->cpu.instr, ctx->cpu.curr_pc);
 		break;
 
-	case CPU_INSTR_JAL:
-		gpr[CPU_GPR_RA] = curr_pc + (sizeof(u32) * 2);
+	case INSTR_JAL:
+		gpr[CPU_GPR_RA] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
 
 		ctx->cpu.next_pc =
-			psycho_cpu_calc_jmp_addr(ctx->cpu.instr, curr_pc);
+			calc_jmp_addr(ctx->cpu.instr, ctx->cpu.curr_pc);
+
 		break;
 
-	case CPU_INSTR_BEQ:
-		branch_if(ctx, gpr[rs] == gpr[rt], curr_pc);
+	case INSTR_BEQ:
+		branch_if(ctx, gpr[rs] == gpr[rt]);
 		break;
 
-	case CPU_INSTR_BNE:
-		branch_if(ctx, gpr[rs] != gpr[rt], curr_pc);
+	case INSTR_BNE:
+		branch_if(ctx, gpr[rs] != gpr[rt]);
 		break;
 
-	case CPU_INSTR_BLEZ:
-		branch_if(ctx, (s32)gpr[rs] <= 0, curr_pc);
+	case INSTR_BLEZ:
+		branch_if(ctx, (s32)gpr[rs] <= 0);
 		break;
 
-	case CPU_INSTR_BGTZ:
-		branch_if(ctx, (s32)gpr[rs] > 0, curr_pc);
+	case INSTR_BGTZ:
+		branch_if(ctx, (s32)gpr[rs] > 0);
 		break;
 
-	case CPU_INSTR_ADDI:
-	case CPU_INSTR_ADDIU:
-		gpr[rt] = psycho_sign_extend_16_32(imm) + gpr[rs];
+	case INSTR_ADDI: {
+		int sum;
+
+		if (unlikely(__builtin_sadd_overflow(sign_ext_16_32(imm),
+						     gpr[rs], &sum))) {
+			raise_exception(ctx, EXCEPTION_OV);
+			break;
+		}
+		gpr[rt] = sum;
+		break;
+	}
+
+	case INSTR_ADDIU:
+		gpr[rt] = sign_ext_16_32(imm) + gpr[rs];
 		break;
 
-	case CPU_INSTR_SLTI:
-		gpr[rt] = (s32)gpr[rs] < (s32)psycho_sign_extend_16_32(imm);
+	case INSTR_SLTI:
+		gpr[rt] = (s32)gpr[rs] < (s32)sign_ext_16_32(imm);
 		break;
 
-	case CPU_INSTR_SLTIU:
-		gpr[rt] = gpr[rs] < psycho_sign_extend_16_32(imm);
+	case INSTR_SLTIU:
+		gpr[rt] = gpr[rs] < sign_ext_16_32(imm);
 		break;
 
-	case CPU_INSTR_ANDI:
+	case INSTR_ANDI:
 		gpr[rt] = gpr[rs] & imm;
 		break;
 
-	case CPU_INSTR_ORI:
+	case INSTR_ORI:
 		gpr[rt] = gpr[rs] | imm;
 		break;
 
-	case CPU_INSTR_XORI:
+	case INSTR_XORI:
 		gpr[rt] = gpr[rs] ^ imm;
 		break;
 
-	case CPU_INSTR_LUI:
+	case INSTR_LUI:
 		gpr[rt] = imm << 16;
 		break;
 
-	case CPU_INSTR_LB: {
-		const u32 m_paddr = get_physical_address(ctx);
+	case INSTR_LB: {
+		const u32 m_paddr = get_phys_addr(ctx);
 
 		gpr[rt] = psycho_bus_load_byte(ctx, m_paddr);
-		gpr[rt] = psycho_sign_extend_8_32(gpr[rt]);
+		gpr[rt] = sign_ext_8_32(gpr[rt]);
 
 		break;
 	}
 
-	case CPU_INSTR_LW: {
-		const u32 m_paddr = get_physical_address(ctx);
+	case INSTR_LH: {
+		const u32 m_paddr = get_phys_addr(ctx);
+
+		if (unlikely(m_paddr & 1)) {
+			raise_exception(ctx, EXCEPTION_ADEL);
+			break;
+		}
+
+		gpr[rt] = psycho_bus_load_halfword(ctx, m_paddr);
+		gpr[rt] = sign_ext_16_32(gpr[rt]);
+
+		break;
+	}
+
+	case INSTR_LWL: {
+		const u32 m_paddr = get_phys_addr(ctx);
+		const u32 aligned_paddr = m_paddr & ~3;
+
+		const u32 word = psycho_bus_load_word(ctx, aligned_paddr);
+
+		const uint shift = (m_paddr & 3) * 8;
+		const uint mask = 0x00FFFFFF >> shift;
+
+		gpr[rt] = (gpr[rt] & mask) | (word << (24 - shift));
+		break;
+	}
+
+	case INSTR_LW: {
+		const u32 m_paddr = get_phys_addr(ctx);
+
+		if (unlikely(m_paddr & 0x3)) {
+			raise_exception(ctx, EXCEPTION_ADEL);
+			break;
+		}
 
 		gpr[rt] = psycho_bus_load_word(ctx, m_paddr);
 		break;
 	}
 
-	case CPU_INSTR_LBU: {
-		const u32 m_paddr = get_physical_address(ctx);
+	case INSTR_LBU: {
+		const u32 m_paddr = get_phys_addr(ctx);
 
 		gpr[rt] = psycho_bus_load_byte(ctx, m_paddr);
 		break;
 	}
 
-	case CPU_INSTR_SB: {
-		const u32 m_paddr = get_physical_address(ctx);
+	case INSTR_LHU: {
+		const u32 m_paddr = get_phys_addr(ctx);
+
+		if (unlikely(m_paddr & 1)) {
+			raise_exception(ctx, EXCEPTION_ADEL);
+			break;
+		}
+
+		gpr[rt] = psycho_bus_load_halfword(ctx, m_paddr);
+		break;
+	}
+
+	case INSTR_LWR: {
+		const u32 m_paddr = get_phys_addr(ctx);
+		const u32 aligned_paddr = m_paddr & ~3;
+
+		const u32 word = psycho_bus_load_word(ctx, aligned_paddr);
+
+		const uint shift = (m_paddr & 3) * 8;
+		const uint mask = 0xFFFFFF00 << (24 - shift);
+
+		gpr[rt] = (gpr[rt] & mask) | (word >> shift);
+		break;
+	}
+
+	case INSTR_SB: {
+		const u32 m_paddr = get_phys_addr(ctx);
 
 		psycho_bus_store_byte(ctx, m_paddr, gpr[rt] & UINT8_MAX);
 		break;
 	}
 
-	case CPU_INSTR_SH: {
-		const u32 m_paddr = get_physical_address(ctx);
+	case INSTR_SH: {
+		const u32 m_paddr = get_phys_addr(ctx);
+
+		if (unlikely(m_paddr & 1)) {
+			raise_exception(ctx, EXCEPTION_ADES);
+			break;
+		}
 
 		psycho_bus_store_halfword(ctx, m_paddr, gpr[rt] & UINT16_MAX);
 		break;
 	}
 
-	case CPU_INSTR_SW: {
+	case INSTR_SW: {
 		if (!(ctx->cpu.cop0[CPU_COP0_SR] & CPU_SR_ISC)) {
-			const u32 m_paddr = get_physical_address(ctx);
+			const u32 m_paddr = get_phys_addr(ctx);
+
+			if (unlikely(m_paddr & 0x3)) {
+				raise_exception(ctx, EXCEPTION_ADES);
+				break;
+			}
 			psycho_bus_store_word(ctx, m_paddr, gpr[rt]);
 		}
 		break;
@@ -308,7 +525,14 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		return;
 	}
 
+	gpr[0] = 0x00000000;
+
 #undef op
 #undef rt
-#undef immediate
+#undef rd
+#undef rs
+#undef funct
+#undef shamt
+#undef imm
+#undef gpr
 }

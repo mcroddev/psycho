@@ -34,8 +34,9 @@ struct psycho_ctx;
 struct psycho_cpu {
 	u32 gpr[CPU_GPR_NUM];
 	u32 cop0[CPU_COP0_NUM];
-	u32 alu_hi;
-	u32 alu_lo;
+	u32 hi;
+	u32 lo;
+	u32 curr_pc;
 	u32 pc;
 	u32 next_pc;
 	u32 instr;
