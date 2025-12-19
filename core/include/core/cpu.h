@@ -26,6 +26,9 @@
 extern "C" {
 #endif // __cplusplus
 
+#include <stdbool.h>
+#include <stddef.h>
+
 #include "cpu-defs.h"
 #include "types.h"
 
@@ -40,6 +43,11 @@ struct psycho_cpu {
 	u32 pc;
 	u32 next_pc;
 	u32 instr;
+
+	struct load_delay {
+		size_t dst;
+		u32 val;
+	} ld_curr, ld_next;
 };
 
 #ifdef __cplusplus

@@ -364,8 +364,16 @@ void psycho_disasm_instr(struct psycho_ctx *const ctx, const u32 instr,
 		set_result("sh %s, 0x%04X(%s)", gpr[rt], imm, gpr[base]);
 		return;
 
+	case INSTR_SWL:
+		set_result("swl %s, 0x%04X(%s)", gpr[rt], imm, gpr[base]);
+		return;
+
 	case INSTR_SW:
 		set_result("sw %s, 0x%04X(%s)", gpr[rt], imm, gpr[base]);
+		return;
+
+	case INSTR_SWR:
+		set_result("swr %s, 0x%04X(%s)", gpr[rt], imm, gpr[base]);
 		return;
 
 	default:

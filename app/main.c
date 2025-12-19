@@ -190,6 +190,9 @@ int main(int argc, char **argv)
 	psycho_init(&emu.ctx, &cfg);
 	psycho_tty_stdout_enable(&emu.ctx, true);
 
+	psycho_log_level_set_global(&emu.ctx, PSYCHO_LOG_LEVEL_TRACE);
+	psycho_disasm_trace_instruction_enable(&emu.ctx, true);
+
 	for (;;) {
 		if (emu.ctx.cpu.pc == 0x80030000) {
 			if (!psycho_exe_load(&emu.ctx, exe_data, exe_size))

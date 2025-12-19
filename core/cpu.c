@@ -20,6 +20,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 // SOFTWARE.
 
+#include <string.h>
+
 #include "core/cpu-defs.h"
 #include "cpu-defs.h"
 
@@ -42,6 +44,28 @@ static void branch_if(struct psycho_ctx *const ctx, const bool cond_met)
 			calc_branch_addr(ctx->cpu.instr, ctx->cpu.curr_pc);
 }
 
+static void load_delay(struct psycho_ctx *const ctx, const size_t dst,
+		       const u32 val)
+{
+	if (!dst) {
+		LOG_WARN(ctx, "Load delay rejected - destination was $zero");
+		return;
+	}
+
+	ctx->cpu.ld_next.dst = dst;
+	ctx->cpu.ld_next.val = val;
+
+	if (ctx->cpu.ld_curr.dst == dst)
+		memset(&ctx->cpu.ld_curr, 0, sizeof(ctx->cpu.ld_curr));
+}
+
+static void load_delay_process(struct psycho_ctx *const ctx)
+{
+	ctx->cpu.gpr[ctx->cpu.ld_curr.dst] = ctx->cpu.ld_curr.val;
+	memset(&ctx->cpu.ld_curr, 0, sizeof(ctx->cpu.ld_curr));
+	swap(&ctx->cpu.ld_curr, &ctx->cpu.ld_next);
+}
+
 static u32 get_phys_addr(struct psycho_ctx *const ctx)
 {
 	const u16 off = instr_off(ctx->cpu.instr);
@@ -57,7 +81,14 @@ static void raise_exception(struct psycho_ctx *const ctx,
 	// On an exception, the CPU:
 
 	static const char *const exc_name[] = {
-		[EXCEPTION_OV] = "Arithmetic overflow",
+		// clang-format off
+
+		[EXCEPTION_ADEL]	= "Address error on load",
+		[EXCEPTION_ADES]	= "Address error on store",
+		[EXCEPTION_BP]		= "Breakpoint",
+		[EXCEPTION_OV]		= "Arithmetic overflow"
+
+		// clang-format on
 	};
 
 	LOG_WARN(ctx, "%s exception raised", exc_name[exc]);
@@ -87,6 +118,9 @@ void psycho_cpu_reset(struct psycho_ctx *const ctx)
 	ctx->cpu.pc = RESET_PC;
 	ctx->cpu.next_pc = RESET_PC + sizeof(u32);
 	ctx->cpu.curr_pc = ctx->cpu.pc;
+
+	memset(&ctx->cpu.ld_curr, 0, sizeof(ctx->cpu.ld_curr));
+	memset(&ctx->cpu.ld_next, 0, sizeof(ctx->cpu.ld_next));
 }
 
 void psycho_cpu_step(struct psycho_ctx *const ctx)
@@ -99,6 +133,11 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 #define shamt (instr_shamt(ctx->cpu.instr))
 #define imm (instr_imm(ctx->cpu.instr))
 #define gpr (ctx->cpu.gpr)
+
+	load_delay_process(ctx);
+
+	if (unlikely(ctx->cpu.pc & 0x00000003))
+		raise_exception(ctx, EXCEPTION_ADEL);
 
 	ctx->cpu.curr_pc = ctx->cpu.pc;
 	const u32 paddr = vaddr_to_paddr(ctx->cpu.curr_pc);
@@ -138,10 +177,25 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			ctx->cpu.next_pc = gpr[rs];
 			break;
 
-		case INSTR_JALR:
-			gpr[rd] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
-			ctx->cpu.next_pc = gpr[rs];
+		case INSTR_JALR: {
+			const u32 target = gpr[rs];
 
+			gpr[rd] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
+
+			if (unlikely(target & 0x00000003)) {
+				raise_exception(ctx, EXCEPTION_ADEL);
+				break;
+			}
+			ctx->cpu.next_pc = target;
+			break;
+		}
+
+		case INSTR_SYSCALL:
+			raise_exception(ctx, EXCEPTION_SYS);
+			break;
+
+		case INSTR_BREAK:
+			raise_exception(ctx, EXCEPTION_BP);
 			break;
 
 		case INSTR_MFHI:
@@ -287,27 +341,16 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		}
 		break;
 
-	case INSTR_GROUP_BCOND:
-		switch (rt) {
-		case INSTR_BLTZ:
-			branch_if(ctx, (s32)gpr[rs] < 0);
-			break;
+	case INSTR_GROUP_BCOND: {
+		const bool link = (rt & 0x1E) == 0x10;
+		const bool branch = (s32)(gpr[rs] ^ (rt << 31)) < 0;
 
-		case INSTR_BGEZ:
-			branch_if(ctx, (s32)gpr[rs] >= 0);
-			break;
-
-		case INSTR_BLTZAL:
+		if (link)
 			gpr[CPU_GPR_RA] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
-			branch_if(ctx, (s32)gpr[rs] < 0);
 
-			break;
-
-		default:
-			illegal(ctx);
-			return;
-		}
+		branch_if(ctx, branch);
 		break;
+	}
 
 	case INSTR_GROUP_COP0:
 		switch (rs) {
@@ -411,9 +454,10 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 	case INSTR_LB: {
 		const u32 m_paddr = get_phys_addr(ctx);
 
-		gpr[rt] = psycho_bus_load_byte(ctx, m_paddr);
-		gpr[rt] = sign_ext_8_32(gpr[rt]);
+		const u32 val =
+			sign_ext_8_32(psycho_bus_load_byte(ctx, m_paddr));
 
+		load_delay(ctx, rt, val);
 		break;
 	}
 
@@ -425,9 +469,10 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			break;
 		}
 
-		gpr[rt] = psycho_bus_load_halfword(ctx, m_paddr);
-		gpr[rt] = sign_ext_16_32(gpr[rt]);
+		const u32 val =
+			sign_ext_16_32(psycho_bus_load_halfword(ctx, m_paddr));
 
+		load_delay(ctx, rt, val);
 		break;
 	}
 
@@ -440,7 +485,13 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const uint shift = (m_paddr & 3) * 8;
 		const uint mask = 0x00FFFFFF >> shift;
 
-		gpr[rt] = (gpr[rt] & mask) | (word << (24 - shift));
+		const u32 val = (ctx->cpu.ld_curr.dst == rt) ?
+					ctx->cpu.ld_curr.val :
+					gpr[rt];
+
+		const u32 res = (val & mask) | (word << (24 - shift));
+
+		load_delay(ctx, rt, res);
 		break;
 	}
 
@@ -452,14 +503,17 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			break;
 		}
 
-		gpr[rt] = psycho_bus_load_word(ctx, m_paddr);
+		const u32 val = psycho_bus_load_word(ctx, m_paddr);
+
+		load_delay(ctx, rt, val);
 		break;
 	}
 
 	case INSTR_LBU: {
 		const u32 m_paddr = get_phys_addr(ctx);
+		const u32 val = psycho_bus_load_byte(ctx, m_paddr);
 
-		gpr[rt] = psycho_bus_load_byte(ctx, m_paddr);
+		load_delay(ctx, rt, val);
 		break;
 	}
 
@@ -471,7 +525,9 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			break;
 		}
 
-		gpr[rt] = psycho_bus_load_halfword(ctx, m_paddr);
+		const u16 val = psycho_bus_load_halfword(ctx, m_paddr);
+		load_delay(ctx, rt, val);
+
 		break;
 	}
 
@@ -484,7 +540,13 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const uint shift = (m_paddr & 3) * 8;
 		const uint mask = 0xFFFFFF00 << (24 - shift);
 
-		gpr[rt] = (gpr[rt] & mask) | (word >> shift);
+		const u32 val = (ctx->cpu.ld_curr.dst == rt) ?
+					ctx->cpu.ld_curr.val :
+					gpr[rt];
+
+		const u32 res = (val & mask) | (word >> shift);
+
+		load_delay(ctx, rt, res);
 		break;
 	}
 
@@ -507,6 +569,20 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		break;
 	}
 
+	case INSTR_SWL: {
+		const u32 m_paddr = get_phys_addr(ctx);
+		const u32 aligned_paddr = m_paddr & ~3;
+
+		const uint shift = (m_paddr & 3) * 8;
+		const uint mask = 0xFFFFFF00 << shift;
+
+		u32 word = psycho_bus_load_word(ctx, aligned_paddr);
+		word = (word & mask) | (gpr[rt] >> (24 - shift));
+		psycho_bus_store_word(ctx, aligned_paddr, word);
+
+		break;
+	}
+
 	case INSTR_SW: {
 		if (!(ctx->cpu.cop0[CPU_COP0_SR] & CPU_SR_ISC)) {
 			const u32 m_paddr = get_phys_addr(ctx);
@@ -517,6 +593,20 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			}
 			psycho_bus_store_word(ctx, m_paddr, gpr[rt]);
 		}
+		break;
+	}
+
+	case INSTR_SWR: {
+		const u32 m_paddr = get_phys_addr(ctx);
+		const u32 aligned_paddr = m_paddr & ~3;
+
+		const uint shift = (m_paddr & 3) * 8;
+		const uint mask = 0x00FFFFFF >> (24 - shift);
+
+		u32 word = psycho_bus_load_word(ctx, aligned_paddr);
+		word = (word & mask) | (gpr[rt] << shift);
+		psycho_bus_store_word(ctx, aligned_paddr, word);
+
 		break;
 	}
 

@@ -53,7 +53,9 @@ enum instr_group_op {
 	INSTR_LWR = 0x26,
 	INSTR_SB = 0x28,
 	INSTR_SH = 0x29,
+	INSTR_SWL = 0x2A,
 	INSTR_SW = 0x2B,
+	INSTR_SWR = 0x2E
 };
 
 enum instr_group_special {
@@ -65,6 +67,8 @@ enum instr_group_special {
 	INSTR_SRAV = 0x07,
 	INSTR_JR = 0x08,
 	INSTR_JALR = 0x09,
+	INSTR_SYSCALL = 0x0C,
+	INSTR_BREAK = 0x0D,
 	INSTR_MFHI = 0x10,
 	INSTR_MTHI = 0x11,
 	INSTR_MFLO = 0x12,
@@ -103,6 +107,8 @@ enum instr_group_cop0 {
 enum cpu_exc_code {
 	EXCEPTION_ADEL = 4,
 	EXCEPTION_ADES = 5,
+	EXCEPTION_SYS = 8,
+	EXCEPTION_BP = 9,
 	EXCEPTION_OV = 12,
 };
 

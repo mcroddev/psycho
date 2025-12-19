@@ -25,6 +25,13 @@
 #include "core/compiler.h"
 #include "core/types.h"
 
+#define swap(a, b)                       \
+	({                               \
+		__auto_type _tmp = *(a); \
+		*(a) = *(b);             \
+		*(b) = _tmp;             \
+	})
+
 ALWAYS_INLINE u32 sign_ext_16_32(const u16 val)
 {
 	return (s16)val;
