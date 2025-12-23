@@ -47,7 +47,7 @@ static void branch_if(struct psycho_ctx *const ctx, const bool cond_met)
 static void load_delay(struct psycho_ctx *const ctx, const size_t dst,
 		       const u32 val)
 {
-	if (!dst) {
+	if (unlikely(!dst)) {
 		LOG_WARN(ctx, "Load delay rejected - destination was $zero");
 		return;
 	}
@@ -388,6 +388,10 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		break;
 
 	case INSTR_JAL:
+		if (unlikely(ctx->cpu.ld_curr.dst == CPU_GPR_RA))
+			memset(&ctx->cpu.ld_curr.dst, 0,
+			       sizeof(ctx->cpu.ld_curr));
+
 		gpr[CPU_GPR_RA] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
 
 		ctx->cpu.next_pc =
