@@ -44,10 +44,13 @@ struct psycho_cpu {
 	u32 next_pc;
 	u32 instr;
 
-	struct load_delay {
+	struct {
 		size_t dst;
 		u32 val;
-	} ld_curr, ld_next;
+	} ld_next, ld_pend;
+
+	bool next_in_branch_delay_slot;
+	bool in_branch_delay_slot;
 };
 
 #ifdef __cplusplus

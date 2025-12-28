@@ -39,31 +39,51 @@ static void illegal(struct psycho_ctx *const ctx)
 
 static void branch_if(struct psycho_ctx *const ctx, const bool cond_met)
 {
+	ctx->cpu.next_in_branch_delay_slot = true;
+	u32 adjust = 0;
+
+	if (unlikely(ctx->cpu.in_branch_delay_slot)) {
+		LOG_WARN(ctx,
+			 "Conditional branch in a branch delay slot detected");
+		adjust = sizeof(u32) * 3;
+	}
+
 	if (cond_met)
-		ctx->cpu.next_pc =
-			calc_branch_addr(ctx->cpu.instr, ctx->cpu.curr_pc);
+		ctx->cpu.next_pc = calc_branch_addr(ctx->cpu.instr,
+						    ctx->cpu.curr_pc + adjust);
 }
 
-static void load_delay(struct psycho_ctx *const ctx, const size_t dst,
-		       const u32 val)
+static void jmp(struct psycho_ctx *const ctx, const u32 val)
+{
+	if (unlikely(ctx->cpu.in_branch_delay_slot))
+		LOG_WARN(
+			ctx,
+			"Unconditional branch in a branch delay slot detected");
+
+	ctx->cpu.next_in_branch_delay_slot = true;
+	ctx->cpu.next_pc = val;
+}
+
+static void gpr_set_delayed(struct psycho_ctx *const ctx, const size_t dst,
+			    const u32 val)
 {
 	if (unlikely(!dst)) {
 		LOG_WARN(ctx, "Load delay rejected - destination was $zero");
 		return;
 	}
 
-	ctx->cpu.ld_next.dst = dst;
-	ctx->cpu.ld_next.val = val;
+	ctx->cpu.ld_pend.dst = dst;
+	ctx->cpu.ld_pend.val = val;
 
-	if (ctx->cpu.ld_curr.dst == dst)
-		memset(&ctx->cpu.ld_curr, 0, sizeof(ctx->cpu.ld_curr));
+	if (ctx->cpu.ld_next.dst == dst)
+		memset(&ctx->cpu.ld_next, 0, sizeof(ctx->cpu.ld_next));
 }
 
 static void load_delay_process(struct psycho_ctx *const ctx)
 {
-	ctx->cpu.gpr[ctx->cpu.ld_curr.dst] = ctx->cpu.ld_curr.val;
-	memset(&ctx->cpu.ld_curr, 0, sizeof(ctx->cpu.ld_curr));
-	swap(&ctx->cpu.ld_curr, &ctx->cpu.ld_next);
+	ctx->cpu.gpr[ctx->cpu.ld_next.dst] = ctx->cpu.ld_next.val;
+	memset(&ctx->cpu.ld_next, 0, sizeof(ctx->cpu.ld_next));
+	swap(&ctx->cpu.ld_pend, &ctx->cpu.ld_next);
 }
 
 static u32 get_phys_addr(struct psycho_ctx *const ctx)
@@ -113,14 +133,30 @@ static void raise_exception(struct psycho_ctx *const ctx,
 	ctx->cpu.next_pc = 0x00000084;
 }
 
+static void gpr_set(struct psycho_ctx *const ctx, const size_t reg,
+		    const u32 val)
+{
+	// If the instruction following a load writes to the same destination
+	// register, the load’s delay slot is canceled.
+	if (unlikely(ctx->cpu.ld_next.dst == reg))
+		memset(&ctx->cpu.ld_next, 0, sizeof(ctx->cpu.ld_next));
+
+	// Don't bother putting a check for a write to gpr[0] here; it's already
+	// bad enough that we have a branch. gpr[0] is unconditionally set to
+	// zero at the end of every step.
+	ctx->cpu.gpr[reg] = val;
+}
+
 void psycho_cpu_reset(struct psycho_ctx *const ctx)
 {
 	ctx->cpu.pc = RESET_PC;
 	ctx->cpu.next_pc = RESET_PC + sizeof(u32);
 	ctx->cpu.curr_pc = ctx->cpu.pc;
+	ctx->cpu.in_branch_delay_slot = false;
+	ctx->cpu.next_in_branch_delay_slot = false;
 
-	memset(&ctx->cpu.ld_curr, 0, sizeof(ctx->cpu.ld_curr));
 	memset(&ctx->cpu.ld_next, 0, sizeof(ctx->cpu.ld_next));
+	memset(&ctx->cpu.ld_pend, 0, sizeof(ctx->cpu.ld_pend));
 }
 
 void psycho_cpu_step(struct psycho_ctx *const ctx)
@@ -133,6 +169,9 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 #define shamt (instr_shamt(ctx->cpu.instr))
 #define imm (instr_imm(ctx->cpu.instr))
 #define gpr (ctx->cpu.gpr)
+
+	ctx->cpu.in_branch_delay_slot = ctx->cpu.next_in_branch_delay_slot;
+	ctx->cpu.next_in_branch_delay_slot = false;
 
 	load_delay_process(ctx);
 
@@ -150,43 +189,44 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 	case INSTR_GROUP_SPECIAL:
 		switch (funct) {
 		case INSTR_SLL:
-			gpr[rd] = gpr[rt] << shamt;
+			gpr_set(ctx, rd, gpr[rt] << shamt);
 			break;
 
 		case INSTR_SRL:
-			gpr[rd] = gpr[rt] >> shamt;
+			gpr_set(ctx, rd, gpr[rt] >> shamt);
 			break;
 
 		case INSTR_SRA:
-			gpr[rd] = (s32)gpr[rt] >> shamt;
+			gpr_set(ctx, rd, (s32)gpr[rt] >> shamt);
 			break;
 
 		case INSTR_SLLV:
-			gpr[rd] = gpr[rt] << (gpr[rs] & 0x0000001F);
+			gpr_set(ctx, rd, gpr[rt] << (gpr[rs] & 0x0000001F));
 			break;
 
 		case INSTR_SRLV:
-			gpr[rd] = gpr[rt] >> (gpr[rs] & 0x0000001F);
+			gpr_set(ctx, rd, gpr[rt] >> (gpr[rs] & 0x0000001F));
 			break;
 
 		case INSTR_SRAV:
-			gpr[rd] = (s32)gpr[rt] >> (gpr[rs] & 0x0000001F);
+			gpr_set(ctx, rd,
+				(s32)gpr[rt] >> (gpr[rs] & 0x0000001F));
 			break;
 
 		case INSTR_JR:
-			ctx->cpu.next_pc = gpr[rs];
+			jmp(ctx, gpr[rs]);
 			break;
 
 		case INSTR_JALR: {
 			const u32 target = gpr[rs];
 
-			gpr[rd] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
+			gpr_set(ctx, rd, ctx->cpu.curr_pc + (sizeof(u32) * 2));
 
 			if (unlikely(target & 0x00000003)) {
 				raise_exception(ctx, EXCEPTION_ADEL);
 				break;
 			}
-			ctx->cpu.next_pc = target;
+			jmp(ctx, target);
 			break;
 		}
 
@@ -199,7 +239,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			break;
 
 		case INSTR_MFHI:
-			gpr[rd] = ctx->cpu.hi;
+			gpr_set(ctx, rd, ctx->cpu.hi);
 			break;
 
 		case INSTR_MTHI:
@@ -207,7 +247,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			break;
 
 		case INSTR_MFLO:
-			gpr[rd] = ctx->cpu.lo;
+			gpr_set(ctx, rd, ctx->cpu.lo);
 			break;
 
 		case INSTR_MTLO:
@@ -254,7 +294,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 				// dividend.
 				ctx->cpu.hi = dividend;
 			} else if (unlikely(((u32)dividend == 0x80000000) &&
-					    ((u32)divisor == 0xFFFFFFFF))) {
+					    ((u32)divisor == UINT32_MAX))) {
 				ctx->cpu.lo = dividend;
 				ctx->cpu.hi = 0x00000000;
 			} else {
@@ -287,12 +327,12 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 				raise_exception(ctx, EXCEPTION_OV);
 				break;
 			}
-			gpr[rd] = sum;
+			gpr_set(ctx, rd, sum);
 			break;
 		}
 
 		case INSTR_ADDU:
-			gpr[rd] = gpr[rs] + gpr[rt];
+			gpr_set(ctx, rd, gpr[rs] + gpr[rt]);
 			break;
 
 		case INSTR_SUB: {
@@ -303,36 +343,36 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 				raise_exception(ctx, EXCEPTION_OV);
 				break;
 			}
-			gpr[rd] = diff;
+			gpr_set(ctx, rd, diff);
 			break;
 		}
 
 		case INSTR_SUBU:
-			gpr[rd] = gpr[rs] - gpr[rt];
+			gpr_set(ctx, rd, gpr[rs] - gpr[rt]);
 			break;
 
 		case INSTR_AND:
-			gpr[rd] = gpr[rs] & gpr[rt];
+			gpr_set(ctx, rd, gpr[rs] & gpr[rt]);
 			break;
 
 		case INSTR_OR:
-			gpr[rd] = gpr[rs] | gpr[rt];
+			gpr_set(ctx, rd, gpr[rs] | gpr[rt]);
 			break;
 
 		case INSTR_XOR:
-			gpr[rd] = gpr[rs] ^ gpr[rt];
+			gpr_set(ctx, rd, gpr[rs] ^ gpr[rt]);
 			break;
 
 		case INSTR_NOR:
-			gpr[rd] = ~(gpr[rs] | gpr[rt]);
+			gpr_set(ctx, rd, ~(gpr[rs] | gpr[rt]));
 			break;
 
 		case INSTR_SLT:
-			gpr[rd] = (s32)gpr[rs] < (s32)gpr[rt];
+			gpr_set(ctx, rd, (s32)gpr[rs] < (s32)gpr[rt]);
 			break;
 
 		case INSTR_SLTU:
-			gpr[rd] = gpr[rs] < gpr[rt];
+			gpr_set(ctx, rd, gpr[rs] < gpr[rt]);
 			break;
 
 		default:
@@ -346,7 +386,8 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const bool branch = (s32)(gpr[rs] ^ (rt << 31)) < 0;
 
 		if (link)
-			gpr[CPU_GPR_RA] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
+			gpr_set(ctx, CPU_GPR_RA,
+				ctx->cpu.curr_pc + (sizeof(u32) * 2));
 
 		branch_if(ctx, branch);
 		break;
@@ -355,7 +396,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 	case INSTR_GROUP_COP0:
 		switch (rs) {
 		case INSTR_COP_MF:
-			gpr[rt] = ctx->cpu.cop0[rd];
+			gpr_set(ctx, rt, ctx->cpu.cop0[rd]);
 			break;
 
 		case INSTR_COP_MT:
@@ -383,19 +424,12 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		break;
 
 	case INSTR_J:
-		ctx->cpu.next_pc =
-			calc_jmp_addr(ctx->cpu.instr, ctx->cpu.curr_pc);
+		jmp(ctx, calc_jmp_addr(ctx->cpu.instr, ctx->cpu.curr_pc));
 		break;
 
 	case INSTR_JAL:
-		if (unlikely(ctx->cpu.ld_curr.dst == CPU_GPR_RA))
-			memset(&ctx->cpu.ld_curr.dst, 0,
-			       sizeof(ctx->cpu.ld_curr));
-
-		gpr[CPU_GPR_RA] = ctx->cpu.curr_pc + (sizeof(u32) * 2);
-
-		ctx->cpu.next_pc =
-			calc_jmp_addr(ctx->cpu.instr, ctx->cpu.curr_pc);
+		gpr_set(ctx, CPU_GPR_RA, ctx->cpu.curr_pc + (sizeof(u32) * 2));
+		jmp(ctx, calc_jmp_addr(ctx->cpu.instr, ctx->cpu.curr_pc));
 
 		break;
 
@@ -423,36 +457,36 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 			raise_exception(ctx, EXCEPTION_OV);
 			break;
 		}
-		gpr[rt] = sum;
+		gpr_set(ctx, rt, sum);
 		break;
 	}
 
 	case INSTR_ADDIU:
-		gpr[rt] = sign_ext_16_32(imm) + gpr[rs];
+		gpr_set(ctx, rt, sign_ext_16_32(imm) + gpr[rs]);
 		break;
 
 	case INSTR_SLTI:
-		gpr[rt] = (s32)gpr[rs] < (s32)sign_ext_16_32(imm);
+		gpr_set(ctx, rt, (s32)gpr[rs] < (s32)sign_ext_16_32(imm));
 		break;
 
 	case INSTR_SLTIU:
-		gpr[rt] = gpr[rs] < sign_ext_16_32(imm);
+		gpr_set(ctx, rt, gpr[rs] < sign_ext_16_32(imm));
 		break;
 
 	case INSTR_ANDI:
-		gpr[rt] = gpr[rs] & imm;
+		gpr_set(ctx, rt, gpr[rs] & imm);
 		break;
 
 	case INSTR_ORI:
-		gpr[rt] = gpr[rs] | imm;
+		gpr_set(ctx, rt, gpr[rs] | imm);
 		break;
 
 	case INSTR_XORI:
-		gpr[rt] = gpr[rs] ^ imm;
+		gpr_set(ctx, rt, gpr[rs] ^ imm);
 		break;
 
 	case INSTR_LUI:
-		gpr[rt] = imm << 16;
+		gpr_set(ctx, rt, imm << 16);
 		break;
 
 	case INSTR_LB: {
@@ -461,7 +495,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const u32 val =
 			sign_ext_8_32(psycho_bus_load_byte(ctx, m_paddr));
 
-		load_delay(ctx, rt, val);
+		gpr_set_delayed(ctx, rt, val);
 		break;
 	}
 
@@ -476,7 +510,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const u32 val =
 			sign_ext_16_32(psycho_bus_load_halfword(ctx, m_paddr));
 
-		load_delay(ctx, rt, val);
+		gpr_set_delayed(ctx, rt, val);
 		break;
 	}
 
@@ -489,13 +523,13 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const uint shift = (m_paddr & 3) * 8;
 		const uint mask = 0x00FFFFFF >> shift;
 
-		const u32 val = (ctx->cpu.ld_curr.dst == rt) ?
-					ctx->cpu.ld_curr.val :
+		const u32 val = (ctx->cpu.ld_next.dst == rt) ?
+					ctx->cpu.ld_next.val :
 					gpr[rt];
 
 		const u32 res = (val & mask) | (word << (24 - shift));
 
-		load_delay(ctx, rt, res);
+		gpr_set_delayed(ctx, rt, res);
 		break;
 	}
 
@@ -509,7 +543,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 
 		const u32 val = psycho_bus_load_word(ctx, m_paddr);
 
-		load_delay(ctx, rt, val);
+		gpr_set_delayed(ctx, rt, val);
 		break;
 	}
 
@@ -517,7 +551,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const u32 m_paddr = get_phys_addr(ctx);
 		const u32 val = psycho_bus_load_byte(ctx, m_paddr);
 
-		load_delay(ctx, rt, val);
+		gpr_set_delayed(ctx, rt, val);
 		break;
 	}
 
@@ -530,7 +564,7 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		}
 
 		const u16 val = psycho_bus_load_halfword(ctx, m_paddr);
-		load_delay(ctx, rt, val);
+		gpr_set_delayed(ctx, rt, val);
 
 		break;
 	}
@@ -544,13 +578,13 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 		const uint shift = (m_paddr & 3) * 8;
 		const uint mask = 0xFFFFFF00 << (24 - shift);
 
-		const u32 val = (ctx->cpu.ld_curr.dst == rt) ?
-					ctx->cpu.ld_curr.val :
+		const u32 val = (ctx->cpu.ld_next.dst == rt) ?
+					ctx->cpu.ld_next.val :
 					gpr[rt];
 
 		const u32 res = (val & mask) | (word >> shift);
 
-		load_delay(ctx, rt, res);
+		gpr_set_delayed(ctx, rt, res);
 		break;
 	}
 
@@ -588,15 +622,16 @@ void psycho_cpu_step(struct psycho_ctx *const ctx)
 	}
 
 	case INSTR_SW: {
-		if (!(ctx->cpu.cop0[CPU_COP0_SR] & CPU_SR_ISC)) {
-			const u32 m_paddr = get_phys_addr(ctx);
+		if (ctx->cpu.cop0[CPU_COP0_SR] & CPU_SR_ISC)
+			break;
 
-			if (unlikely(m_paddr & 0x3)) {
-				raise_exception(ctx, EXCEPTION_ADES);
-				break;
-			}
-			psycho_bus_store_word(ctx, m_paddr, gpr[rt]);
+		const u32 m_paddr = get_phys_addr(ctx);
+
+		if (unlikely(m_paddr & 0x3)) {
+			raise_exception(ctx, EXCEPTION_ADES);
+			break;
 		}
+		psycho_bus_store_word(ctx, m_paddr, gpr[rt]);
 		break;
 	}
 
