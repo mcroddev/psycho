@@ -44,11 +44,12 @@ static const char *const log_level_name[PSYCHO_LOG_LEVEL_NUM] = {
 static const char *const module_name[PSYCHO_LOG_MODULE_ID_NUM] = {
 	// clang-format off
 
-	[PSYCHO_LOG_MODULE_ID_CTX]	= "ctx",
-	[PSYCHO_LOG_MODULE_ID_CPU]	= "cpu",
-	[PSYCHO_LOG_MODULE_ID_DISASM]	= "disasm",
-	[PSYCHO_LOG_MODULE_ID_BUS]	= "bus",
-	[PSYCHO_LOG_MODULE_ID_BIOS]	= "bios"
+	[PSYCHO_LOG_MODULE_ID_CTX]		= "ctx",
+	[PSYCHO_LOG_MODULE_ID_CPU]		= "cpu",
+	[PSYCHO_LOG_MODULE_ID_DISASM]		= "disasm",
+	[PSYCHO_LOG_MODULE_ID_BUS]		= "bus",
+	[PSYCHO_LOG_MODULE_ID_BIOS]		= "bios",
+	[PSYCHO_LOG_MODULE_ID_TTY_STDOUT]	= "tty-stdout"
 
 	// clang-format on
 };

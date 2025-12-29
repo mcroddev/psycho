@@ -82,7 +82,8 @@ static const char *const cop0_cpr[CPU_COP0_NUM] = {
 	[CPU_COP0_BPCM]		= "BPCM",
 	[CPU_COP0_SR]		= "SR",
 	[CPU_COP0_CAUSE]	= "CAUSE",
-	[CPU_COP0_PRID]		= "PRID",
+	[CPU_COP0_EPC]		= "EPC",
+	[CPU_COP0_PRID]		= "PRID"
 
 	// clang-format on
 };
@@ -256,6 +257,9 @@ void psycho_disasm_instr(struct psycho_ctx *const ctx, const u32 instr,
 	case INSTR_GROUP_COP0:
 		switch (rs) {
 		case INSTR_COP_MF:
+			if (!cop0_cpr[rd])
+				LOG_INFO(ctx, "null rd=%d", rd);
+
 			set_result("mfc0 %s, %s", gpr[rt], cop0_cpr[rd]);
 			return;
 

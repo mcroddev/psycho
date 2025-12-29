@@ -26,6 +26,11 @@
 #include "core/types.h"
 #include "util.h"
 
+#define CPU_DCIC_DR
+#define CPU_DCIC_PC
+#define CPU_DCIC_DE (1 << 23)
+#define CPU_DCIC_DAE (1 << 25)
+
 enum instr_group_op {
 	INSTR_GROUP_SPECIAL = 0x00,
 	INSTR_GROUP_BCOND = 0x01,

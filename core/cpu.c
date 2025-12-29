@@ -75,7 +75,7 @@ static void gpr_set_delayed(struct psycho_ctx *const ctx, const size_t dst,
 	ctx->cpu.ld_pend.dst = dst;
 	ctx->cpu.ld_pend.val = val;
 
-	if (ctx->cpu.ld_next.dst == dst)
+	if (unlikely(ctx->cpu.ld_next.dst == dst))
 		memset(&ctx->cpu.ld_next, 0, sizeof(ctx->cpu.ld_next));
 }
 
@@ -84,15 +84,6 @@ static void load_delay_process(struct psycho_ctx *const ctx)
 	ctx->cpu.gpr[ctx->cpu.ld_next.dst] = ctx->cpu.ld_next.val;
 	memset(&ctx->cpu.ld_next, 0, sizeof(ctx->cpu.ld_next));
 	swap(&ctx->cpu.ld_pend, &ctx->cpu.ld_next);
-}
-
-static u32 get_phys_addr(struct psycho_ctx *const ctx)
-{
-	const u16 off = instr_off(ctx->cpu.instr);
-	const uint base = instr_rs(ctx->cpu.instr);
-	const u32 vaddr = get_vaddr(off, ctx->cpu.gpr[base]);
-
-	return vaddr_to_paddr(vaddr);
 }
 
 static void raise_exception(struct psycho_ctx *const ctx,
@@ -105,6 +96,7 @@ static void raise_exception(struct psycho_ctx *const ctx,
 
 		[EXCEPTION_ADEL]	= "Address error on load",
 		[EXCEPTION_ADES]	= "Address error on store",
+		[EXCEPTION_SYS]		= "System call",
 		[EXCEPTION_BP]		= "Breakpoint",
 		[EXCEPTION_OV]		= "Arithmetic overflow"
 
@@ -131,6 +123,37 @@ static void raise_exception(struct psycho_ctx *const ctx,
 	// 4) transfers control to the exception entry point.
 	ctx->cpu.pc = 0x00000080;
 	ctx->cpu.next_pc = 0x00000084;
+}
+
+static void dbg_data_bp_chk(struct psycho_ctx *const ctx, const u32 vaddr)
+{
+	if (likely(!(ctx->cpu.cop0[CPU_COP0_DCIC] &
+		     (CPU_DCIC_DE | CPU_DCIC_DAE))))
+		return;
+
+	const u32 bda = ctx->cpu.cop0[CPU_COP0_BDA];
+	const u32 bdam = ctx->cpu.cop0[CPU_COP0_BDAM];
+
+	if (unlikely(!((vaddr ^ bda) & bdam))) {
+		raise_exception(ctx, EXCEPTION_BP);
+		ctx->cpu.pc = 0x80000040;
+		ctx->cpu.next_pc = 0x80000044;
+	}
+}
+
+static u32 get_phys_addr(struct psycho_ctx *const ctx)
+{
+	const u16 off = instr_off(ctx->cpu.instr);
+	const uint base = instr_rs(ctx->cpu.instr);
+	u32 vaddr = get_vaddr(off, ctx->cpu.gpr[base]);
+
+	dbg_data_bp_chk(ctx, vaddr);
+
+	// Dirty filthy hack!
+	if (vaddr <= 0x00FFFFFF)
+		vaddr &= 0x000FFFFF;
+
+	return vaddr_to_paddr(vaddr);
 }
 
 static void gpr_set(struct psycho_ctx *const ctx, const size_t reg,
